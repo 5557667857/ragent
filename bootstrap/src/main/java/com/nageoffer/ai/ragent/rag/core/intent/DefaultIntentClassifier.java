@@ -149,7 +149,7 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
                 .thinking(false)
                 .build();
 
-        String raw = llmService.chat(request);
+        String raw = SpringAiChatSupport.chat(chatModel, request);
 
         try {
             // 移除可能的 markdown 代码块标记
