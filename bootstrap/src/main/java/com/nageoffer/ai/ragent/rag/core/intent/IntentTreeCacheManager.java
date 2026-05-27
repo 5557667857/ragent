@@ -75,7 +75,7 @@ public class IntentTreeCacheManager {
      */
     public void saveIntentTreeToCache(List<IntentNode> roots) {
         try {
-            String cacheJson = objectMapper.writeValueAsString(roots);
+            String cacheJson = JSON.toJSONString(roots);
             stringRedisTemplate.opsForValue().set(
                     INTENT_TREE_CACHE_KEY,
                     cacheJson,
