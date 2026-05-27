@@ -157,9 +157,6 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
             JsonArray arr;
             if (root.isJsonArray()) {
                 arr = root.getAsJsonArray();
-            } else if (root.isJsonObject() && root.getAsJsonObject().has("results")) {
-                // 容错：如果模型外面又包了一层 { "results": [...] }
-                arr = root.getAsJsonObject().getAsJsonArray("results");
             } else {
                 log.warn("LLM 返回了非预期的 JSON 格式, 原始响应: {}", raw);
                 return List.of();
