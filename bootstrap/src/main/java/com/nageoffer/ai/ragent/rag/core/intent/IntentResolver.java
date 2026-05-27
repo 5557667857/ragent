@@ -89,7 +89,7 @@ public class IntentResolver {
     }
 
     private List<NodeScore> classifyIntents(String question) {
-        //子问题意图分类
+        //子问题意图分类,子问题取分数最高的意图，最多三个，且分数必须大于等于 INTENT_MIN_SCORE
         List<NodeScore> scores = intentClassifier.classifyTargets(question);
         return scores.stream()
                 .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
