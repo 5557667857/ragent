@@ -65,7 +65,7 @@ public class IntentResolver {
                         },
                         intentClassifyExecutor
                 ))
-                .toList();
+                .collect(Collectors.toList());
         List<SubQuestionIntent> subIntents = tasks.stream()
                 .map(CompletableFuture::join)
                 .toList();
