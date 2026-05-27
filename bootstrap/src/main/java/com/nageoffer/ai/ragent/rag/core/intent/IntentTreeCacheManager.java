@@ -61,12 +61,7 @@ public class IntentTreeCacheManager {
                 log.info("意图树缓存不存在，需要从数据库加载");
                 return null;
             }
-
-            return objectMapper.readValue(
-                    cacheJson,
-                    new TypeReference<>() {
-                    }
-            );
+            return JSON.parseArray(cacheJson, IntentNode.class);
         } catch (Exception e) {
             log.error("从Redis读取意图树缓存失败", e);
             return null;
