@@ -161,11 +161,9 @@ public class IntentResolver {
             int index = candidate.subQuestionIndex();
             if (!selected[index]) {
                 topIntents.add(candidate);
-                selected[index] = true;
-            }
-            // 所有子问题都有了保底意图，提前退出
-            if (topIntents.size() == subQuestionCount) {
-                break;
+                if (topIntents.size() == subQuestionCount) {
+                    break;
+                }
             }
         }
         return topIntents;
