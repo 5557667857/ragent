@@ -262,11 +262,10 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
 
     private List<IntentNode> loadIntentTreeFromDB() {
         // 1. 查出所有未删除且已启用的节点（扁平结构）
-        List<IntentNodeDO> intentNodeDOList = intentNodeMapper.selectList(
-                Wrappers.lambdaQuery(IntentNodeDO.class)
-                        .eq(IntentNodeDO::getDeleted, 0)
-                        .eq(IntentNodeDO::getEnabled, 1)
-        );
+        LambdaQueryWrapper<IntentNodeDO> wrapper = new LambdaQueryWrapper<IntentNodeDO>()
+                .eq(IntentNodeDO::getDeleted, 0)
+                .eq(IntentNodeDO::getEnabled, 1);
+        List<IntentNodeDO> intentNodeDOList = intentNodeMapper.selectList(wrapper);
 
         if (intentNodeDOList.isEmpty()) {
             return List.of();
