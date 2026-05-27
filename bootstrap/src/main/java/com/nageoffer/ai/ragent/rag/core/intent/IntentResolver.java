@@ -68,7 +68,7 @@ public class IntentResolver {
                 .collect(Collectors.toList());
         List<SubQuestionIntent> subIntents = tasks.stream()
                 .map(CompletableFuture::join)
-                .toList();
+                .collect(Collectors.toList());
         return capTotalIntents(subIntents);
     }
 
