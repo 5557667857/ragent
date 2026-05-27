@@ -152,10 +152,7 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
         String raw = SpringAiChatSupport.chat(chatModel, request);
 
         try {
-            // 移除可能的 markdown 代码块标记
-            String cleanedRaw = LLMResponseCleaner.stripMarkdownCodeFence(raw);
-
-            JsonElement root = JsonParser.parseString(cleanedRaw);
+            JsonElement root = JsonParser.parseString(raw);
 
             JsonArray arr;
             if (root.isJsonArray()) {
