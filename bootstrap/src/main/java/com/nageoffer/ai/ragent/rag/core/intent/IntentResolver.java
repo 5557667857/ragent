@@ -89,6 +89,7 @@ public class IntentResolver {
     }
 
     private List<NodeScore> classifyIntents(String question) {
+        //子问题意图分类
         List<NodeScore> scores = intentClassifier.classifyTargets(question);
         return scores.stream()
                 .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
