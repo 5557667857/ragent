@@ -198,8 +198,7 @@ public class RetrievalEngine {
 
     private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
         // 使用多通道检索引擎（是否启用全局检索由置信度阈值决定）
-        List<SubQuestionIntent> subIntents = List.of(intent);
-        List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK);
+        List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKnowledgeChannels(intent, topK);
 
         if (CollUtil.isEmpty(chunks)) {
             return KbResult.empty();
