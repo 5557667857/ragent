@@ -87,18 +87,6 @@ public class IntentDirectedSearchChannel implements SearchChannel {
             // 提取 KB 意图
             List<NodeScore> kbIntents = extractKbIntents(context);
 
-            if (CollUtil.isEmpty(kbIntents)) {
-                log.warn("意图定向检索通道被启用，但未找到 KB 意图（不应该发生）");
-                return SearchChannelResult.builder()
-                        .channelType(SearchChannelType.INTENT_DIRECTED)
-                        .channelName(getName())
-                        .chunks(List.of())
-                        .latencyMs(System.currentTimeMillis() - startTime)
-                        .build();
-            }
-
-            log.info("执行意图定向检索，识别出 {} 个 KB 意图", kbIntents.size());
-
             // 并行检索所有意图对应的知识库
             int topKMultiplier = properties.getChannels().getIntentDirected().getTopKMultiplier();
             List<RetrievedChunk> allChunks = retrieveByIntents(
