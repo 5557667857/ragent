@@ -146,7 +146,6 @@ public class SystemSettingsVO {
     public static class MemorySettings {
         private Integer historyKeepTurns;
         private Boolean summaryEnabled;
-        private Integer summaryStartTurns;
         private Integer summaryMaxChars;
         private Integer titleMaxLength;
     }

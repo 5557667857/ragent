@@ -19,7 +19,6 @@ package com.nageoffer.ai.ragent.rag.controller;
 
 import com.nageoffer.ai.ragent.framework.convention.Result;
 import com.nageoffer.ai.ragent.framework.web.Results;
-import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
 import com.nageoffer.ai.ragent.rag.config.MemoryProperties;
 import com.nageoffer.ai.ragent.rag.config.RAGConfigProperties;
 import com.nageoffer.ai.ragent.rag.config.RAGDefaultProperties;
@@ -36,8 +35,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * RAG 设置控制器，负责系统 RAG、AI 模型等配置信息的查询
@@ -50,13 +49,27 @@ public class RAGSettingsController {
     private final RAGConfigProperties ragConfigProperties;
     private final RAGRateLimitProperties ragRateLimitProperties;
     private final MemoryProperties memoryProperties;
-    private final AIModelProperties aiModelProperties;
 
     @Value("${spring.servlet.multipart.max-file-size:50MB}")
     private DataSize maxFileSize;
 
     @Value("${spring.servlet.multipart.max-request-size:100MB}")
     private DataSize maxRequestSize;
+
+    @Value("${spring.ai.openai.base-url:}")
+    private String openAiBaseUrl;
+
+    @Value("${spring.ai.openai.api-key:}")
+    private String openAiApiKey;
+
+    @Value("${spring.ai.openai.chat.options.model:}")
+    private String chatModel;
+
+    @Value("${spring.ai.openai.embedding.options.model:}")
+    private String embeddingModel;
+
+    @Value("${rag.stream.message-chunk-size:5}")
+    private Integer messageChunkSize;
 
     /**
      * 获取系统 RAG、AI 模型等配置信息
@@ -84,7 +97,7 @@ public class RAGSettingsController {
                                 .build())
                         .memory(toMemorySettings(memoryProperties))
                         .build())
-                .ai(toAISettings(aiModelProperties))
+                .ai(toAISettings())
                 .build();
         return Results.success(response);
     }
@@ -101,62 +114,42 @@ public class RAGSettingsController {
         return MemorySettings.builder()
                 .historyKeepTurns(props.getHistoryKeepTurns())
                 .summaryEnabled(props.getSummaryEnabled())
-                .summaryStartTurns(props.getSummaryStartTurns())
                 .summaryMaxChars(props.getSummaryMaxChars())
                 .titleMaxLength(props.getTitleMaxLength())
                 .build();
     }
 
-    private AISettings toAISettings(AIModelProperties props) {
+    private AISettings toAISettings() {
         Map<String, AISettings.ProviderConfig> providers = new HashMap<>();
-        if (props.getProviders() != null) {
-            props.getProviders().forEach((k, v) -> providers.put(k, AISettings.ProviderConfig.builder()
-                    .url(v.getUrl())
-                    .apiKey(maskApiKey(v.getApiKey()))
-                    .endpoints(v.getEndpoints())
-                    .build()));
-        }
+        providers.put("openai", AISettings.ProviderConfig.builder()
+                .url(openAiBaseUrl)
+                .apiKey(maskApiKey(openAiApiKey))
+                .endpoints(Map.of("chat", "/v1/chat/completions", "embedding", "/v1/embeddings"))
+                .build());
 
         return AISettings.builder()
                 .providers(providers)
-                .chat(toModelGroup(props.getChat()))
-                .embedding(toModelGroup(props.getEmbedding()))
-                .rerank(toModelGroup(props.getRerank()))
-                .selection(props.getSelection() == null
-                        ? null
-                        : AISettings.Selection.builder()
-                          .failureThreshold(props.getSelection().getFailureThreshold())
-                          .openDurationMs(props.getSelection().getOpenDurationMs())
-                          .build())
-                .stream(props.getStream() == null
-                        ? null
-                        : AISettings.Stream.builder()
-                          .messageChunkSize(props.getStream().getMessageChunkSize())
-                          .build())
+                .chat(singleModelGroup("openai-chat", chatModel, null))
+                .embedding(singleModelGroup("openai-embedding", embeddingModel, ragDefaultProperties.getDimension()))
+                .rerank(singleModelGroup("noop-rerank", "noop", null))
+                .stream(AISettings.Stream.builder()
+                        .messageChunkSize(messageChunkSize)
+                        .build())
                 .build();
     }
 
-    private AISettings.ModelGroup toModelGroup(AIModelProperties.ModelGroup group) {
-        if (group == null) {
-            return null;
-        }
+    private AISettings.ModelGroup singleModelGroup(String id, String model, Integer dimension) {
         return AISettings.ModelGroup.builder()
-                .defaultModel(group.getDefaultModel())
-                .deepThinkingModel(group.getDeepThinkingModel())
-                .candidates(group.getCandidates() == null
-                        ? null
-                        : group.getCandidates().stream()
-                          .map(c -> AISettings.ModelCandidate.builder()
-                                    .id(c.getId())
-                                    .provider(c.getProvider())
-                                    .model(c.getModel())
-                                    .url(c.getUrl())
-                                    .dimension(c.getDimension())
-                                    .priority(c.getPriority())
-                                    .enabled(c.getEnabled())
-                                    .supportsThinking(c.getSupportsThinking())
-                                    .build())
-                          .collect(Collectors.toList()))
+                .defaultModel(model)
+                .candidates(List.of(AISettings.ModelCandidate.builder()
+                        .id(id)
+                        .provider("openai")
+                        .model(model)
+                        .dimension(dimension)
+                        .priority(1)
+                        .enabled(true)
+                        .supportsThinking(false)
+                        .build()))
                 .build();
     }
 

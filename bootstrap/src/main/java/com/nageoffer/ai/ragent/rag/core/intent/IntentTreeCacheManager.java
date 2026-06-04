@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.rag.core.intent;
 
+import com.alibaba.fastjson2.JSON;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

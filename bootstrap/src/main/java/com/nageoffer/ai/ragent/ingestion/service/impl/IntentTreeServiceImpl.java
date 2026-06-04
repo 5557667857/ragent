@@ -186,6 +186,9 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
         if (req.getCollectionName() != null) {
             node.setCollectionName(req.getCollectionName());
         }
+        if (req.getMcpToolId() != null) {
+            node.setMcpToolId(req.getMcpToolId());
+        }
         if (req.getTopK() != null) {
             node.setTopK(normalizeTopK(req.getTopK()));
         }

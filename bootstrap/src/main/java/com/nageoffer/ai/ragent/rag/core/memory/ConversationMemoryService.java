@@ -58,7 +58,9 @@ public interface ConversationMemoryService {
      * @return 包含追加前的历史记录
      */
     default List<ChatMessage> loadAndAppend(String conversationId, String userId, ChatMessage message) {
+        // 加载历史对话
         List<ChatMessage> history = load(conversationId, userId);
+        // 追加消息到历史记录
         append(conversationId, userId, message);
         return history;
     }

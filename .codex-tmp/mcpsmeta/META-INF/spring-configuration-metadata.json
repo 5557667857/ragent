@@ -1,0 +1,196 @@
+{
+  "groups": [
+    {
+      "name": "spring.ai.mcp.server",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerChangeNotificationProperties",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerChangeNotificationProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server.annotation-scanner",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.annotations.McpServerAnnotationScannerProperties",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.annotations.McpServerAnnotationScannerProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server.capabilities",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$Capabilities",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "sourceMethod": "getCapabilities()"
+    },
+    {
+      "name": "spring.ai.mcp.server.streamable-http",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "spring.ai.mcp.server.annotation-scanner.enabled",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.annotations.McpServerAnnotationScannerProperties",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.base-url",
+      "type": "java.lang.String",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties",
+      "defaultValue": ""
+    },
+    {
+      "name": "spring.ai.mcp.server.capabilities.completion",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$Capabilities",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.capabilities.prompt",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$Capabilities",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.capabilities.resource",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$Capabilities",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.capabilities.tool",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$Capabilities",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable\/disable the MCP server. <p> When set to false, the MCP server and all its components will not be initialized.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.instructions",
+      "type": "java.lang.String",
+      "description": "The instructions of the MCP server instance. <p> These instructions are used to provide guidance to the client on how to interact with this server.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server.keep-alive-interval",
+      "type": "java.time.Duration",
+      "description": "The duration to keep the connection alive. Disabled by default.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server.name",
+      "type": "java.lang.String",
+      "description": "The name of the MCP server instance. <p> This name is used to identify the server in logs and monitoring.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": "mcp-server"
+    },
+    {
+      "name": "spring.ai.mcp.server.prompt-change-notification",
+      "type": "java.lang.Boolean",
+      "description": "Enable\/disable notifications for prompt changes. Only relevant for MCP servers with prompt capabilities. <p> When enabled, the server will notify clients when prompt templates are modified.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerChangeNotificationProperties",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.protocol",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$ServerProtocol",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": "sse"
+    },
+    {
+      "name": "spring.ai.mcp.server.request-timeout",
+      "type": "java.time.Duration",
+      "description": "Sets the duration to wait for server responses before timing out requests. This timeout applies to all requests made through the client, including tool calls, resource access, and prompt operations.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": "20s"
+    },
+    {
+      "name": "spring.ai.mcp.server.resource-change-notification",
+      "type": "java.lang.Boolean",
+      "description": "Enable\/disable notifications for resource changes. Only relevant for MCP servers with resource capabilities. <p> When enabled, the server will notify clients when resources are added, updated, or removed.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerChangeNotificationProperties",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.sse-endpoint",
+      "type": "java.lang.String",
+      "description": "An SSE endpoint, for clients to establish a connection and receive messages from the server",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties",
+      "defaultValue": "\/sse"
+    },
+    {
+      "name": "spring.ai.mcp.server.sse-message-endpoint",
+      "type": "java.lang.String",
+      "description": "A regular HTTP POST endpoint for clients to send messages to the server.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerSseProperties",
+      "defaultValue": "\/mcp\/message"
+    },
+    {
+      "name": "spring.ai.mcp.server.stdio",
+      "type": "java.lang.Boolean",
+      "description": "Enable\/disable the standard input\/output (stdio) transport. <p> When enabled, the server will listen for incoming messages on the standard input and write responses to the standard output.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": false
+    },
+    {
+      "name": "spring.ai.mcp.server.streamable-http.disallow-delete",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties",
+      "defaultValue": false
+    },
+    {
+      "name": "spring.ai.mcp.server.streamable-http.keep-alive-interval",
+      "type": "java.time.Duration",
+      "description": "The duration to keep the connection alive.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server.streamable-http.mcp-endpoint",
+      "type": "java.lang.String",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties",
+      "defaultValue": "\/mcp"
+    },
+    {
+      "name": "spring.ai.mcp.server.tool-change-notification",
+      "type": "java.lang.Boolean",
+      "description": "Enable\/disable notifications for tool changes. Only relevant for MCP servers with tool capabilities. <p> When enabled, the server will notify clients when tools are registered or unregistered.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerChangeNotificationProperties",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.ai.mcp.server.tool-response-mime-type",
+      "type": "java.util.Map<java.lang.String,java.lang.String>",
+      "description": "(Optional) response MIME type per tool name.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties"
+    },
+    {
+      "name": "spring.ai.mcp.server.type",
+      "type": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties$ApiType",
+      "description": "The type of server to use for MCP server communication. <p> Supported types are: <ul> <li>SYNC - Standard synchronous server (default)<\/li> <li>ASYNC - Asynchronous server<\/li> <\/ul>",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": "sync"
+    },
+    {
+      "name": "spring.ai.mcp.server.version",
+      "type": "java.lang.String",
+      "description": "The version of the MCP server instance.",
+      "sourceType": "org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties",
+      "defaultValue": "1.0.0"
+    }
+  ],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}

@@ -18,10 +18,10 @@
 package com.nageoffer.ai.ragent.rag.service.handler;
 
 import com.nageoffer.ai.ragent.infra.chat.StreamCallback;
-import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
 import com.nageoffer.ai.ragent.rag.core.memory.ConversationMemoryService;
 import com.nageoffer.ai.ragent.rag.service.ConversationGroupService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -33,10 +33,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequiredArgsConstructor
 public class StreamCallbackFactory {
 
-    private final AIModelProperties modelProperties;
     private final ConversationMemoryService memoryService;
     private final ConversationGroupService conversationGroupService;
     private final StreamTaskManager taskManager;
+
+    @Value("${rag.stream.message-chunk-size:5}")
+    private int messageChunkSize;
 
     /**
      * 创建聊天事件处理器
@@ -53,7 +55,7 @@ public class StreamCallbackFactory {
                 .emitter(emitter)
                 .conversationId(conversationId)
                 .taskId(taskId)
-                .modelProperties(modelProperties)
+                .messageChunkSize(messageChunkSize)
                 .memoryService(memoryService)
                 .conversationGroupService(conversationGroupService)
                 .taskManager(taskManager)

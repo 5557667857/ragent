@@ -27,12 +27,9 @@ import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.infra.chat.StreamCallback;
-import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
 import com.nageoffer.ai.ragent.rag.core.memory.ConversationMemoryService;
 import lombok.extern.slf4j.Slf4j;
 import com.nageoffer.ai.ragent.rag.service.ConversationGroupService;
-
-import java.util.Optional;
 
 @Slf4j
 public class StreamChatEventHandler implements StreamCallback {
@@ -69,7 +66,7 @@ public class StreamChatEventHandler implements StreamCallback {
         this.userId = UserContext.getUserId();
 
         // 计算配置
-        this.messageChunkSize = resolveMessageChunkSize(params.getModelProperties());
+        this.messageChunkSize = Math.max(1, params.getMessageChunkSize());
         this.sendTitleOnComplete = shouldSendTitle();
 
         // 初始化（发送初始事件、注册任务）
@@ -82,15 +79,6 @@ public class StreamChatEventHandler implements StreamCallback {
     private void initialize() {
         sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));
         taskManager.register(taskId, sender, this::buildCompletionPayloadOnCancel);
-    }
-
-    /**
-     * 解析消息块大小
-     */
-    private int resolveMessageChunkSize(AIModelProperties modelProperties) {
-        return Math.max(1, Optional.ofNullable(modelProperties.getStream())
-                .map(AIModelProperties.Stream::getMessageChunkSize)
-                .orElse(5));
     }
 
     /**

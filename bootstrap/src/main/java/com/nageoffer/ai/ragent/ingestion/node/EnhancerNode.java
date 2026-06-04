@@ -30,7 +30,8 @@ import com.nageoffer.ai.ragent.ingestion.domain.settings.EnhancerSettings;
 import com.nageoffer.ai.ragent.ingestion.prompt.EnhancerPromptManager;
 import com.nageoffer.ai.ragent.ingestion.util.JsonResponseParser;
 import com.nageoffer.ai.ragent.ingestion.util.PromptTemplateRenderer;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -46,11 +47,11 @@ import java.util.Map;
 public class EnhancerNode implements IngestionNode {
 
     private final ObjectMapper objectMapper;
-    private final LLMService llmService;
+    private final ChatModel chatModel;
 
-    public EnhancerNode(ObjectMapper objectMapper, LLMService llmService) {
+    public EnhancerNode(ObjectMapper objectMapper, ChatModel chatModel) {
         this.objectMapper = objectMapper;
-        this.llmService = llmService;
+        this.chatModel = chatModel;
     }
 
     @Override
@@ -88,7 +89,7 @@ public class EnhancerNode implements IngestionNode {
                             ChatMessage.user(userPrompt)
                     ))
                     .build();
-            String response = chat(request, settings.getModelId());
+            String response = chat(request);
             applyTaskResult(context, type, response);
         }
 
@@ -125,8 +126,8 @@ public class EnhancerNode implements IngestionNode {
         return PromptTemplateRenderer.render(template, vars);
     }
 
-    private String chat(ChatRequest request, String modelId) {
-        return llmService.chat(request, modelId);
+    private String chat(ChatRequest request) {
+        return SpringAiChatSupport.chat(chatModel, request);
     }
 
     private void applyTaskResult(IngestionContext context, EnhanceType type, String response) {

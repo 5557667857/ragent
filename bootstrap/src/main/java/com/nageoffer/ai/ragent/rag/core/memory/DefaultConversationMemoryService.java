@@ -35,6 +35,7 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
 
     private final ConversationMemoryStore memoryStore;
     private final ConversationMemorySummaryService summaryService;
+    @Qualifier("memoryLoadExecutor")
     private final Executor memoryLoadExecutor;
 
     public DefaultConversationMemoryService(ConversationMemoryStore memoryStore,
@@ -65,6 +66,7 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
             // 等待所有任务完成后合并结果
             return CompletableFuture.allOf(summaryFuture, historyFuture)
                     .thenApply(v -> {
+                        //拿到两个任务的返回值
                         ChatMessage summary = summaryFuture.join();
                         List<ChatMessage> history = historyFuture.join();
                         log.debug("加载对话记忆 - conversationId: {}, userId: {}, 摘要: {}, 历史消息数: {}, 耗时: {}ms",
@@ -105,10 +107,8 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
 
     @Override
     public String append(String conversationId, String userId, ChatMessage message) {
-        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
-            return null;
-        }
         String messageId = memoryStore.append(conversationId, userId, message);
+        // 在每一轮对话结束后，决定是否异步触发摘要压缩（仅 ASSISTANT 消息触发）
         summaryService.compressIfNeeded(conversationId, userId, message);
         return messageId;
     }

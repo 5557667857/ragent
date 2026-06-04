@@ -19,7 +19,7 @@ package com.nageoffer.ai.ragent.rag.rewrite;
 
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
 import com.nageoffer.ai.ragent.rag.core.rewrite.QueryRewriteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -37,7 +38,7 @@ import java.util.List;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class QueryRewriteTests {
 
-    private final LLMService llmService;
+    private final ChatModel chatModel;
     private final QueryRewriteService defaultQueryRewriteService;
 
     private static final String QUERY_REWRITE_PROMPT = """
@@ -110,7 +111,7 @@ public class QueryRewriteTests {
                 .thinking(false)
                 .build();
 
-        String rewritten = llmService.chat(request);
+        String rewritten = SpringAiChatSupport.chat(chatModel, request);
 
         log.info("\n用户问题：{}\n改写查询：{}", userQuestion, rewritten);
         return rewritten;

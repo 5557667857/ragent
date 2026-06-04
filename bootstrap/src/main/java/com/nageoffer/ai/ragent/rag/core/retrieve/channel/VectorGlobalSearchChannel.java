@@ -26,6 +26,7 @@ import com.nageoffer.ai.ragent.rag.config.SearchChannelProperties;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.core.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.rag.core.retrieve.channel.strategy.CollectionParallelRetriever;
+import com.nageoffer.ai.ragent.rag.dto.SubQuestionIntent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -72,9 +73,8 @@ public class VectorGlobalSearchChannel implements SearchChannel {
             return false;
         }
 
-        List<NodeScore> allScores = context.getIntents().stream()
-                .flatMap(si -> si.nodeScores().stream())
-                .toList();
+        SubQuestionIntent subIntent = context.getSubIntent();
+        List<NodeScore> allScores = subIntent != null ? subIntent.nodeScores() : List.of();
         if (CollUtil.isEmpty(allScores)) {
             log.info("未识别出任何意图，启用全局检索");
             return true;

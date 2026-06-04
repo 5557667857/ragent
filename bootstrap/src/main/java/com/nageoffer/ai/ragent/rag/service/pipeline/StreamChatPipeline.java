@@ -21,12 +21,13 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
 import com.nageoffer.ai.ragent.infra.chat.StreamCallback;
 import com.nageoffer.ai.ragent.infra.chat.StreamCancellationHandle;
+import com.nageoffer.ai.ragent.infra.chat.StreamCancellationHandles;
 import com.nageoffer.ai.ragent.rag.core.guidance.GuidanceDecision;
 import com.nageoffer.ai.ragent.rag.core.guidance.IntentGuidanceService;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentResolver;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
 import com.nageoffer.ai.ragent.rag.core.memory.ConversationMemoryService;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptContext;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
@@ -41,10 +42,13 @@ import com.nageoffer.ai.ragent.rag.config.SearchChannelProperties;
 import com.nageoffer.ai.ragent.rag.service.handler.StreamTaskManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
+import reactor.core.Disposable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 
@@ -67,7 +71,7 @@ public class StreamChatPipeline {
     private final IntentResolver intentResolver;
     private final IntentGuidanceService guidanceService;
     private final RetrievalEngine retrievalEngine;
-    private final LLMService llmService;
+    private final ChatModel chatModel;
     private final RAGPromptService promptBuilder;
     private final PromptTemplateLoader promptTemplateLoader;
     private final StreamTaskManager taskManager;
@@ -75,23 +79,35 @@ public class StreamChatPipeline {
     /**
      * 执行流式对话管道
      */
+    /**
+     * 执行流式对话管道的主入口方法
+     * @param ctx 流式对话上下文，包含请求参数、状态及回调等信息
+     */
     public void execute(StreamChatContext ctx) {
+        // 加载历史对话记忆并追加当前用户问题到上下文中
         loadMemory(ctx);
+        // 对用户问题进行查询改写和子问题拆分
         rewriteQuery(ctx);
+        // 解析改写后问题的意图，识别具体的业务或知识领域意图
         resolveIntents(ctx);
 
+        // 检测是否存在歧义，若存在则进行引导性回复并终止后续流程
         if (handleGuidance(ctx)) {
             return;
         }
+        // 检查是否仅包含系统级意图（如问候、闲聊等），若是则直接生成系统回复并终止后续流程
         if (handleSystemOnly(ctx)) {
             return;
         }
 
+        // 根据解析出的意图执行知识库或外部工具的检索操作
         RetrievalContext retrievalCtx = retrieve(ctx);
+        // 若检索结果为空，则返回默认提示语并终止后续流程
         if (handleEmptyRetrieval(ctx, retrievalCtx)) {
             return;
         }
 
+        // 组装最终 Prompt 并调用大模型进行流式响应输出
         streamRagResponse(ctx, retrievalCtx);
     }
 
@@ -202,7 +218,7 @@ public class StreamChatPipeline {
                 .temperature(0.7D)
                 .thinking(false)
                 .build();
-        return llmService.streamChat(req, callback);
+        return streamChat(req, callback);
     }
 
     private StreamCancellationHandle streamLLMResponse(RewriteResult rewriteResult, RetrievalContext ctx,
@@ -230,6 +246,19 @@ public class StreamChatPipeline {
                 .topP(ctx.hasMcp() ? 0.8D : 1D)
                 .build();
 
-        return llmService.streamChat(chatRequest, callback);
+        return streamChat(chatRequest, callback);
+    }
+
+    private StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        Disposable disposable = chatModel.stream(SpringAiChatSupport.toPrompt(request))
+                .map(SpringAiChatSupport::content)
+                .filter(StrUtil::isNotBlank)
+                .subscribe(
+                        callback::onContent,
+                        callback::onError,
+                        callback::onComplete
+                );
+        return StreamCancellationHandles.fromRunnable(disposable::dispose, cancelled);
     }
 }

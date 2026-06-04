@@ -18,9 +18,9 @@
 package com.nageoffer.ai.ragent.rag.core.retrieve;
 
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -34,12 +34,12 @@ import java.util.List;
 public class PgRetrieverService implements RetrieverService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final EmbeddingService embeddingService;
+    private final EmbeddingModel embeddingModel;
 
     @Override
     public List<RetrievedChunk> retrieve(RetrieveRequest request) {
-        List<Float> embedding = embeddingService.embed(request.getQuery());
-        float[] vector = normalize(toArray(embedding));
+        //对问题进行向量化和归一化
+        float[] vector = normalize(embeddingModel.embed(request.getQuery()));
         return retrieveByVector(vector, request);
     }
 
@@ -73,14 +73,6 @@ public class PgRetrieverService implements RetrieverService {
             }
         }
         return vector;
-    }
-
-    private float[] toArray(List<Float> list) {
-        float[] arr = new float[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            arr[i] = list.get(i);
-        }
-        return arr;
     }
 
     private String toVectorLiteral(float[] embedding) {

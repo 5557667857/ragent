@@ -90,6 +90,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -114,20 +115,33 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final MessageQueueProducer messageQueueProducer;
     private final KnowledgeScheduleProperties scheduleProperties;
     private final RemoteFileFetcher remoteFileFetcher;
-
     @Value("knowledge-document-chunk_topic${unique-name:}")
     private String chunkTopic;
 
     @Override
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest requestParam, MultipartFile file) {
+        // 1. 先确认目标知识库存在。后续文件会存到该知识库对应的对象存储 Bucket / Collection 中。
         KnowledgeBaseDO kbDO = knowledgeBaseMapper.selectById(kbId);
         Assert.notNull(kbDO, () -> new ClientException("知识库不存在"));
 
+        // 2. 解析文档来源类型，并校验来源参数。
+        //    sourceType=file 时使用前端上传的 MultipartFile；
+        //    sourceType=url 时使用 sourceLocation 远程拉取文件，并且可选配置定时刷新。
         SourceType sourceType = SourceType.normalize(requestParam.getSourceType());
         validateSourceAndSchedule(sourceType, requestParam);
+
+        // 3. 把文件保存到对象存储，并拿到统一的文件元信息。
+        //    对本地上传文件：直接上传 MultipartFile。
+        //    对远程 URL：先下载远程文件，再上传到对象存储。
         StoredFileDTO stored = resolveStoredFile(kbDO.getCollectionName(), sourceType, requestParam.getSourceLocation(), file);
+
+        // 4. 解析后续处理模式。
+        //    chunk 模式：上传后等待触发普通分块；
+        //    pipeline 模式：上传后等待触发指定 Pipeline 处理。
         ProcessModeConfig modeConfig = resolveProcessModeConfig(requestParam);
 
+        // 5. 组装文档数据库记录。
+        //    此时只登记文档基本信息和文件存储地址，真正的分块、Embedding、向量入库在 startChunk/executeChunk 阶段完成。
         KnowledgeDocumentDO documentDO = KnowledgeDocumentDO.builder()
                 .kbId(kbId)
                 .docName(stored.getOriginalFilename())
@@ -148,8 +162,11 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 .createdBy(UserContext.getUsername())
                 .updatedBy(UserContext.getUsername())
                 .build();
+
+        // 6. 将文档记录插入数据库。初始状态为 PENDING，表示已上传但尚未完成分块处理。
         documentMapper.insert(documentDO);
 
+        // 7. 返回前端展示需要的 VO。这里返回的是文档记录信息，不包含分块结果。
         return BeanUtil.toBean(documentDO, KnowledgeDocumentVO.class);
     }
 
@@ -196,10 +213,16 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         runChunkTask(documentDO);
     }
 
+    /**
+     * 执行一次完整的文档分块任务。
+     *
+     * <p>调用入口通常来自 MQ 消费：startChunk 只负责把文档标记为 RUNNING 并发送消息，
+     * 真正的解析、分块、Embedding 和入库都在这里串起来执行。</p>
+     */
     private void runChunkTask(KnowledgeDocumentDO documentDO) {
         String docId = documentDO.getId();
         ProcessMode processMode = ProcessMode.normalize(documentDO.getProcessMode());
-
+        // 每次分块都会先记录一条运行日志，后续成功或失败时回写耗时、数量和错误信息。
         KnowledgeDocumentChunkLogDO chunkLog = KnowledgeDocumentChunkLogDO.builder()
                 .docId(docId)
                 .status(DocumentStatus.RUNNING.getCode())
@@ -219,10 +242,12 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         try {
             List<VectorChunk> chunkResults;
             if (ProcessMode.PIPELINE == processMode) {
+                // Pipeline 模式：把文件交给配置好的摄取流水线处理，解析/增强/分块由各节点完成。
                 long start = System.currentTimeMillis();
                 chunkResults = runPipelineProcess(documentDO);
                 chunkDuration = System.currentTimeMillis() - start;
             } else {
+                // Chunk 模式：使用内置流程，按“抽取文本 -> 分块 -> Embedding”顺序处理。
                 ChunkProcessResult result = runChunkProcess(documentDO);
                 extractDuration = result.extractDuration();
                 chunkDuration = result.chunkDuration();
@@ -230,6 +255,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 chunkResults = result.chunks();
             }
 
+
+            // 最后统一持久化：先清理旧数据，再写入新的 Chunk 记录和向量，避免重分块时残留旧结果。
             long persistStart = System.currentTimeMillis();
             String collectionName = resolveCollectionName(documentDO.getKbId());
             int savedCount = persistChunksAndVectorsAtomically(collectionName, docId, chunkResults);
@@ -239,6 +266,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             updateChunkLog(chunkLog.getId(), DocumentStatus.SUCCESS.getCode(), savedCount,
                     extractDuration, chunkDuration, embedDuration, persistDuration, totalDuration, null);
         } catch (Exception e) {
+            // 任意阶段失败都把文档置为 FAILED，并在分块日志里保留错误原因。
             log.error("文档分块任务执行失败：docId={}", docId, e);
             markChunkFailed(documentDO.getId());
             long totalDuration = System.currentTimeMillis() - totalStartTime;
@@ -247,6 +275,11 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         }
     }
 
+    /**
+     * 原子化保存分块结果。
+     * <p>同一个事务里完成数据库 Chunk、向量库记录和文档状态更新，避免出现数据库成功但向量未更新、
+     * 或向量已写入但文档状态仍是旧状态的中间态。</p>
+     */
     private int persistChunksAndVectorsAtomically(String collectionName, String docId, List<VectorChunk> chunkResults) {
         List<KnowledgeChunkCreateRequest> chunks = chunkResults.stream()
                 .map(vc -> {
@@ -256,12 +289,14 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                     req.setContent(vc.getContent());
                     return req;
                 })
-                .toList();
+                .collect(Collectors.toList());
         transactionOperations.executeWithoutResult(status -> {
+            // 支持重复分块：先删除该文档旧的 Chunk 和向量，再写入本次结果。
             knowledgeChunkService.deleteByDocId(docId);
             knowledgeChunkService.batchCreate(docId, chunks);
             vectorStoreService.deleteDocumentVectors(collectionName, docId);
             vectorStoreService.indexDocumentChunks(collectionName, docId, chunkResults);
+            // 只有 Chunk 和向量都写入成功后，才把文档状态更新为 SUCCESS。
             KnowledgeDocumentDO updateDocumentDO = KnowledgeDocumentDO.builder()
                     .id(docId)
                     .chunkCount(chunks.size())
@@ -273,6 +308,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         return chunks.size();
     }
 
+    /**
+     * 回写本次分块任务的执行结果，供前端“分块详情/日志”查看。
+     */
     private void updateChunkLog(String logId, String status, int chunkCount, long extractDuration,
                                 long chunkDuration, long embedDuration, long persistDuration,
                                 long totalDuration, String errorMessage) {
@@ -293,26 +331,27 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     /**
      * 使用分块策略处理文档，失败直接抛异常，由 runChunkTask 统一处理错误状态
-     * 4 阶段中的前 3 阶段：Extract → Chunk → Embed
+     * 4 阶段中的前 3 阶段：Extract -> Chunk -> Embed
      */
     private ChunkProcessResult runChunkProcess(KnowledgeDocumentDO documentDO) {
         ChunkingMode chunkingMode = ChunkingMode.fromValue(documentDO.getChunkStrategy());
-        KnowledgeBaseDO kbDO = knowledgeBaseMapper.selectById(documentDO.getKbId());
-        String embeddingModel = kbDO.getEmbeddingModel();
         ChunkingOptions config = buildChunkingOptions(chunkingMode, documentDO);
 
+        // Extract：从对象存储读取原文件，并用 Tika 抽取纯文本。
         long extractStart = System.currentTimeMillis();
         try (InputStream is = fileStorageService.openStream(documentDO.getFileUrl())) {
             String text = parserSelector.select(ParserType.TIKA.getType()).extractText(is, documentDO.getDocName());
             long extractDuration = System.currentTimeMillis() - extractStart;
 
+            // Chunk：根据文档配置选择 fixed_size 或 structure_aware 等分块策略。
             ChunkingStrategy chunkingStrategy = chunkingStrategyFactory.requireStrategy(chunkingMode);
             long chunkStart = System.currentTimeMillis();
             List<VectorChunk> chunks = chunkingStrategy.chunk(text, config);
             long chunkDuration = System.currentTimeMillis() - chunkStart;
 
+            // Embed：为每个 Chunk 生成向量；向量写入动作在后面的持久化阶段完成。
             long embedStart = System.currentTimeMillis();
-            chunkEmbeddingService.embed(chunks, embeddingModel);
+            chunkEmbeddingService.embed(chunks);
             long embedDuration = System.currentTimeMillis() - embedStart;
 
             return new ChunkProcessResult(chunks, extractDuration, chunkDuration, embedDuration);
@@ -342,6 +381,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
         KnowledgeBaseDO kbDO = knowledgeBaseMapper.selectById(documentDO.getKbId());
 
+        // Pipeline 定义来自管理端配置，典型链路是 fetcher/parser/enhancer/chunker/indexer。
         PipelineDefinition pipelineDef = ingestionPipelineService.getDefinition(pipelineId);
 
         byte[] fileBytes;
@@ -351,6 +391,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             throw new RuntimeException("读取文件内容失败：docId=" + docId, e);
         }
 
+        // 这里直接把文件字节放进上下文，所以 Pipeline 内通常会从 parser 节点开始消费 rawBytes。
+        // skipIndexerWrite=true 表示流水线只产出 chunks，最终入库仍由 runChunkTask 统一处理。
         IngestionContext context = IngestionContext.builder()
                 .taskId(docId)
                 .pipelineId(pipelineId)
@@ -362,6 +404,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 .skipIndexerWrite(true)
                 .build();
 
+        // 摄取引擎会按 pipeline 的 nextNodeId 链式执行，产出的 chunks 写回 IngestionContext。
         IngestionContext result = ingestionEngine.execute(pipelineDef, context);
 
         if (result.getError() != null) {
@@ -621,7 +664,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 log.warn("启用文档时未找到任何 Chunk，跳过向量重建，docId={}", docId);
                 return;
             }
-            chunkEmbeddingService.embed(vectorChunks, kbDO.getEmbeddingModel());
+            chunkEmbeddingService.embed(vectorChunks);
         }
 
         final List<VectorChunk> finalVectorChunks = vectorChunks;

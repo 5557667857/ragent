@@ -24,8 +24,8 @@ import com.nageoffer.ai.ragent.rag.config.RAGDefaultProperties;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiEmbeddingSupport;
 import com.nageoffer.ai.ragent.rag.core.retrieve.RetrieverService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.InsertReq;
@@ -36,6 +36,8 @@ import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.metadata.Metadata;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.util.StringUtils;
@@ -55,8 +57,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class InvoiceIndexDocumentTests {
 
-    private final LLMService llmService;
-    private final EmbeddingService embeddingService;
+    private final ChatModel chatModel;
+    private final EmbeddingModel embeddingModel;
     private final MilvusClientV2 milvusClient;
     private final RetrieverService retrieverService;
     private final RAGDefaultProperties ragDefaultProperties;
@@ -133,7 +135,7 @@ public class InvoiceIndexDocumentTests {
                 .topP(0.7D)
                 .build();
 
-        String chat = llmService.chat(req);
+        String chat = SpringAiChatSupport.chat(chatModel, req);
         System.out.println(chat);
     }
 
@@ -172,7 +174,7 @@ public class InvoiceIndexDocumentTests {
                 %s
                 """
                 .formatted(fileContent);
-        return llmService.chat(prompt);
+        return chat(prompt);
     }
 
     @Test
@@ -320,7 +322,7 @@ public class InvoiceIndexDocumentTests {
             String chunk = chunks.get(i);
             if (!StringUtils.hasText(chunk)) continue;
 
-            List<Float> emb = embeddingService.embed(chunk);
+            List<Float> emb = SpringAiEmbeddingSupport.embedAsList(embeddingModel, chunk);
 
             JsonObject row = new JsonObject();
             // 每个 chunk 一个独立主键
@@ -346,5 +348,13 @@ public class InvoiceIndexDocumentTests {
         JsonArray arr = new JsonArray();
         list.forEach(arr::add);
         return arr;
+    }
+
+    private String chat(String prompt) {
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(ChatMessage.user(prompt)))
+                .thinking(false)
+                .build();
+        return SpringAiChatSupport.chat(chatModel, request);
     }
 }

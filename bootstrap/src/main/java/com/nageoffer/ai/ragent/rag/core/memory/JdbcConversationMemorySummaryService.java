@@ -21,8 +21,8 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.config.MemoryProperties;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
 import com.nageoffer.ai.ragent.rag.dao.entity.ConversationMessageDO;
 import com.nageoffer.ai.ragent.rag.dao.entity.ConversationSummaryDO;
@@ -33,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -57,16 +58,18 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
     private final ConversationGroupService conversationGroupService;
     private final ConversationMessageService conversationMessageService;
     private final MemoryProperties memoryProperties;
-    private final LLMService llmService;
+    private final ChatModel chatModel;
     private final PromptTemplateLoader promptTemplateLoader;
     private final RedissonClient redissonClient;
     private final Executor memorySummaryExecutor;
 
     @Override
     public void compressIfNeeded(String conversationId, String userId, ChatMessage message) {
+        // 是否启用对话记忆
         if (!memoryProperties.getSummaryEnabled()) {
             return;
         }
+        // 是否是助手消息,作为完整对话的判断
         if (message.getRole() != ChatMessage.Role.ASSISTANT) {
             return;
         }
@@ -98,9 +101,8 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
 
     private void doCompressIfNeeded(String conversationId, String userId) {
         long startTime = System.currentTimeMillis();
-        int triggerTurns = memoryProperties.getSummaryStartTurns();
         int maxTurns = memoryProperties.getHistoryKeepTurns();
-        if (maxTurns <= 0 || triggerTurns <= 0) {
+        if (maxTurns <= 0) {
             return;
         }
 
@@ -110,11 +112,6 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
             return;
         }
         try {
-            long total = conversationGroupService.countUserMessages(conversationId, userId);
-            if (total < triggerTurns) {
-                return;
-            }
-
             ConversationSummaryDO latestSummary = conversationGroupService.findLatestSummary(conversationId, userId);
             List<ConversationMessageDO> latestUserTurns = conversationGroupService.listLatestUserOnlyMessages(
                     conversationId,
@@ -141,6 +138,14 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
                     cutoffId
             );
             if (CollUtil.isEmpty(toSummarize)) {
+                return;
+            }
+
+            // 攒批：待摘要区间内用户消息数不足 batchSize 时跳过，等攒够了再批量压缩
+            long userMsgCount = toSummarize.stream()
+                    .filter(m -> "user".equalsIgnoreCase(m.getRole()))
+                    .count();
+            if (userMsgCount < memoryProperties.getSummaryBatchSize()) {
                 return;
             }
 
@@ -200,7 +205,7 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
                 .thinking(false)
                 .build();
         try {
-            String result = llmService.chat(request);
+            String result = SpringAiChatSupport.chat(chatModel, request);
             log.info("对话摘要生成 - resultChars: {}", result.length());
 
             return result;

@@ -25,7 +25,6 @@ export interface SystemSettings {
     };
     memory: {
       historyKeepTurns: number;
-      summaryStartTurns: number;
       summaryEnabled: boolean;
       summaryMaxChars: number;
       titleMaxLength: number;

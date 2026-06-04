@@ -18,59 +18,53 @@
 package com.nageoffer.ai.ragent.core.chunk;
 
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 分块嵌入服务
- * 职责单一：为已切分的文本块调用嵌入 API 生成向量
+ * 职责单一：为分块结果对象调用嵌入 API 生成向量
  */
 @Service
 @RequiredArgsConstructor
 public class ChunkEmbeddingService {
 
-    private final EmbeddingService embeddingService;
+    private final EmbeddingModel embeddingModel;
 
     /**
-     * 为分块列表计算嵌入向量
-     *
-     * @param chunks         已切分的文本块（embedding 字段将被原地填充）
-     * @param embeddingModel 嵌入模型 ID，null 时使用系统默认模型
+     * 为分块结果对象计算嵌入向量
+     * @param chunks         分块结果对象
      */
-    public void embed(List<VectorChunk> chunks, String embeddingModel) {
+    public void embed(List<VectorChunk> chunks) {
         if (chunks == null || chunks.isEmpty()) {
             return;
         }
+        //检查嵌入向量是否已经计算，避免重复计算
         if (chunks.stream().allMatch(c -> c.getEmbedding() != null && c.getEmbedding().length > 0)) {
             return;
         }
+        //提取文本内容列表
         List<String> texts = chunks.stream()
                 .map(c -> c.getContent() == null ? "" : c.getContent())
-                .toList();
-        List<List<Float>> vectors = StringUtils.hasText(embeddingModel)
-                ? embeddingService.embedBatch(texts, embeddingModel)
-                : embeddingService.embedBatch(texts);
+                .collect(Collectors.toList());
+        List<float[]> vectors = embeddingModel.embed(texts);
         applyEmbeddings(chunks, vectors);
     }
 
-    private void applyEmbeddings(List<VectorChunk> chunks, List<List<Float>> vectors) {
+    private void applyEmbeddings(List<VectorChunk> chunks, List<float[]> vectors) {
         if (vectors == null || vectors.size() != chunks.size()) {
             throw new ClientException("Embedding result size mismatch");
         }
         for (int i = 0; i < chunks.size(); i++) {
-            List<Float> row = vectors.get(i);
-            if (row == null) {
+            float[] row = vectors.get(i);
+            if (row == null || row.length == 0) {
                 throw new ClientException("Embedding result missing, index: " + i);
             }
-            float[] vec = new float[row.size()];
-            for (int j = 0; j < row.size(); j++) {
-                vec[j] = row.get(j);
-            }
-            chunks.get(i).setEmbedding(vec);
+            chunks.get(i).setEmbedding(row);
         }
     }
 }

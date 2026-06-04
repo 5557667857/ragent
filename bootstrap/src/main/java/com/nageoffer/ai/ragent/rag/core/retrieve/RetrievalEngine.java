@@ -1,20 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.nageoffer.ai.ragent.rag.core.retrieve;
 
 import cn.hutool.core.collection.CollUtil;
@@ -25,19 +8,17 @@ import com.nageoffer.ai.ragent.rag.config.SearchChannelProperties;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScoreFilters;
-import com.nageoffer.ai.ragent.rag.core.mcp.McpParameterExtractor;
-import com.nageoffer.ai.ragent.rag.core.mcp.McpToolExecutor;
 import com.nageoffer.ai.ragent.rag.core.mcp.McpToolRegistry;
 import com.nageoffer.ai.ragent.rag.core.prompt.ContextFormatter;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
 import com.nageoffer.ai.ragent.rag.dto.KbResult;
 import com.nageoffer.ai.ragent.rag.dto.RetrievalContext;
 import com.nageoffer.ai.ragent.rag.dto.SubQuestionIntent;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -53,8 +34,9 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.CONTEXT_FORMAT_PA
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MULTI_CHANNEL_KEY;
 
 /**
- * 检索引擎
- * 负责协调多通道检索（知识库）和 MCP（模型控制协议）工具的调用，并对检索结果进行重排序和格式化，最终生成用于 LLM 的上下文
+ * 检索引擎。
+ * <p>
+ * 负责协调知识库检索和 MCP 工具调用，将不同通道的结果格式化为可供 LLM 使用的上下文。
  */
 @Slf4j
 @Service
@@ -64,14 +46,14 @@ public class RetrievalEngine {
     private final SearchChannelProperties searchProperties;
     private final ContextFormatter contextFormatter;
     private final PromptTemplateLoader templateLoader;
-    private final McpParameterExtractor mcpParameterExtractor;
     private final McpToolRegistry mcpToolRegistry;
     private final MultiChannelRetrievalEngine multiChannelRetrievalEngine;
+    private final ChatModel chatModel;
     private final Executor ragContextExecutor;
     private final Executor mcpBatchExecutor;
 
     /**
-     * 检索方法：根据子问题意图列表执行检索，整合知识库和MCP工具的结果
+     * 根据子问题意图列表执行检索，整合知识库和 MCP 工具结果。
      */
     @RagTraceNode(name = "retrieval-engine", type = "RETRIEVE")
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
@@ -91,7 +73,7 @@ public class RetrievalEngine {
                                         resolveSubQuestionTopK(si, finalTopK)
                                 );
                             } catch (Exception e) {
-                                log.error("子问题上下文构建失败，降级为空上下文，question：{}", si.subQuestion(), e);
+                                log.error("子问题上下文构建失败，降级为空上下文，question={}", si.subQuestion(), e);
                                 return new SubQuestionContext(si.subQuestion(), "", "", Map.of());
                             }
                         },
@@ -145,21 +127,42 @@ public class RetrievalEngine {
                 .build();
     }
 
+    /**
+     * 根据单个子问题的意图分类结果，分别执行 KB 检索和 MCP 工具调用，并构建该子问题上下文。
+     * <p>
+     * 意图到动作的分发在这里发生：一个子问题可能同时命中 KB 和 MCP 两类意图，
+     * 两个通道会分别执行后再合并。
+     *
+     * @param intent 子问题及其意图候选列表
+     * @param topK   该子问题的检索 TopK，未配置时回退到全局默认值
+     * @return 子问题上下文，包含 KB 检索文本、MCP 调用结果文本，以及按意图节点分组的原始 chunk
+     */
     private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {
+        // 1. 按 IntentNode.kind 将意图候选分流：KB 走知识库检索，MCP 走工具调用。
+        //    NodeScoreFilters.kb(): node != null && node.isKB()
+        //    NodeScoreFilters.mcp(): node != null && node.isMCP() && mcpToolId 非空
         List<NodeScore> kbIntents = NodeScoreFilters.kb(intent.nodeScores());
         List<NodeScore> mcpIntents = NodeScoreFilters.mcp(intent.nodeScores());
 
+        // 2. 知识库通道：执行多通道检索、重排和上下文格式化。
+        //    返回 KbResult，包含格式化文本 groupedContext 和按意图节点分组的原始 chunk。
         KbResult kbResult = retrieveAndRerank(intent, kbIntents, topK);
 
+        // 3. MCP 通道：如果命中 MCP 意图，则按意图节点逐个调用工具并合并结果。
+        //    executeMcpAndMerge 内部会：
+        //    a) 遍历每个 MCP 意图并调用 executeSingleMcpTool()
+        //    b) 将命中的 ToolCallback 交给 ChatClient，由模型根据工具 schema 解析参数并调用工具
+        //    c) 使用 ContextFormatter 将模型结合工具结果生成的文本格式化为 LLM 可读上下文
         String mcpContext = CollUtil.isNotEmpty(mcpIntents)
                 ? executeMcpAndMerge(intent.subQuestion(), mcpIntents)
                 : "";
 
+        // 4. 合并两路结果为一个 SubQuestionContext。
         return new SubQuestionContext(intent.subQuestion(), kbResult.groupedContext(), mcpContext, kbResult.intentChunks());
     }
 
     /**
-     * 子问题实际 TopK 计算规则
+     * 计算子问题实际使用的 TopK。
      */
     private int resolveSubQuestionTopK(SubQuestionIntent intent, int fallbackTopK) {
         return NodeScoreFilters.kb(intent.nodeScores()).stream()
@@ -188,7 +191,7 @@ public class RetrievalEngine {
             return "";
         }
 
-        Map<String, List<CallToolResult>> toolResults = executeMcpTools(question, mcpIntents);
+        Map<String, List<String>> toolResults = executeMcpTools(question, mcpIntents);
         if (toolResults.isEmpty()) {
             return "";
         }
@@ -197,26 +200,25 @@ public class RetrievalEngine {
     }
 
     private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
-        // 使用多通道检索引擎（是否启用全局检索由置信度阈值决定）
+        // 使用多通道检索引擎，是否启用全局检索由置信度阈值决定。
         List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKnowledgeChannels(intent, topK);
 
         if (CollUtil.isEmpty(chunks)) {
             return KbResult.empty();
         }
 
-        // 按意图节点分组（用于格式化上下文）
+        // 按意图节点分组，用于格式化上下文。
         Map<String, List<RetrievedChunk>> intentChunks = new HashMap<>();
 
-        // 如果有意图识别结果，按意图节点 ID 分组
+        // 如果有意图识别结果，按意图节点 ID 分组。
         if (CollUtil.isNotEmpty(kbIntents)) {
-            // 将所有 chunks 按意图节点 ID 分配
-            // 注意：多通道检索返回的 chunks 无法精确对应到某个意图节点
-            // 所以我们将所有 chunks 分配给每个意图节点
+            // 多通道检索返回的 chunks 无法精确对应到某个意图节点，
+            // 因此将所有 chunks 分配给每个命中的意图节点。
             for (NodeScore ns : kbIntents) {
                 intentChunks.put(ns.getNode().getId(), chunks);
             }
         } else {
-            // 如果没有意图识别结果，使用特殊 key
+            // 如果没有意图识别结果，使用特殊 key 承载多通道检索结果。
             intentChunks.put(MULTI_CHANNEL_KEY, chunks);
         }
 
@@ -225,10 +227,10 @@ public class RetrievalEngine {
     }
 
     /**
-     * 执行 MCP 工具调用，返回按 toolId 分组的结果
+     * 执行 MCP 工具调用，返回按 toolId 分组的结果。
      */
-    private Map<String, List<CallToolResult>> executeMcpTools(String question,
-                                                              List<NodeScore> mcpIntentScores) {
+    private Map<String, List<String>> executeMcpTools(String question,
+                                                       List<NodeScore> mcpIntentScores) {
         if (CollUtil.isEmpty(mcpIntentScores)) {
             return Map.of();
         }
@@ -238,14 +240,11 @@ public class RetrievalEngine {
                         () -> {
                             String toolId = ns.getNode().getMcpToolId();
                             try {
-                                CallToolResult result = executeSingleMcpTool(question, ns.getNode());
+                                String result = executeSingleMcpTool(question, ns.getNode());
                                 return result == null ? null : new ToolOutput(toolId, result);
                             } catch (Exception e) {
                                 log.error("MCP 工具调用异常, toolId: {}", toolId, e);
-                                return new ToolOutput(toolId, CallToolResult.builder()
-                                        .content(List.of(new TextContent("工具调用异常: " + e.getMessage())))
-                                        .isError(true)
-                                        .build());
+                                return new ToolOutput(toolId, "工具调用异常: " + e.getMessage());
                             }
                         },
                         mcpBatchExecutor
@@ -261,24 +260,35 @@ public class RetrievalEngine {
                 ));
     }
 
-    private CallToolResult executeSingleMcpTool(String question, IntentNode intentNode) {
+    private String executeSingleMcpTool(String question, IntentNode intentNode) {
+        // 从意图节点中取得要调用的 MCP 工具名。
         String toolId = intentNode.getMcpToolId();
-        Optional<McpToolExecutor> executorOpt = mcpToolRegistry.getExecutor(toolId);
-        if (executorOpt.isEmpty()) {
-            log.warn("MCP 工具不存在: {}", toolId);
+        // 按工具名获取 Spring AI MCP ToolCallback。这里返回的 ToolCallback 内部持有 MCP Client
+        Optional<ToolCallback> toolCallbackOpt = mcpToolRegistry.getToolCallback(toolId);
+        if (toolCallbackOpt.isEmpty()) {
+            log.warn("MCP 工具不存在, toolId={}", toolId);
             return null;
         }
+        ToolCallback toolCallback = toolCallbackOpt.get();
+        StringBuilder systemPrompt = new StringBuilder(StrUtil.isNotBlank(intentNode.getPromptTemplate())
+                ? intentNode.getPromptTemplate()
+                : "你正在处理一个已由意图树判定需要调用 MCP 工具的问题。必须使用当前提供的工具获取结果，然后基于工具返回内容用中文简洁回答。");
+        if (StrUtil.isNotBlank(intentNode.getParamPromptTemplate())) {
+            systemPrompt.append("\n\n工具参数提取要求：\n")
+                    .append(intentNode.getParamPromptTemplate());
+        }
 
-        McpToolExecutor executor = executorOpt.get();
-        Tool tool = executor.getToolDefinition();
-
-        String customParamPrompt = intentNode.getParamPromptTemplate();
-        Map<String, Object> params = mcpParameterExtractor.extractParameters(question, tool, customParamPrompt);
-
-        return executor.execute(params != null ? params : new HashMap<>());
+        return ChatClient.builder(chatModel)
+                .build()
+                .prompt()
+                .system(systemPrompt.toString())
+                .user(question)
+                .toolCallbacks(toolCallback)
+                .call()
+                .content();
     }
 
-    private record ToolOutput(String toolId, CallToolResult result) {
+    private record ToolOutput(String toolId, String result) {
     }
 
     private record SubQuestionContext(String question,

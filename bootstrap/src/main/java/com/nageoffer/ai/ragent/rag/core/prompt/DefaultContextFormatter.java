@@ -22,8 +22,6 @@ import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -56,9 +54,6 @@ public class DefaultContextFormatter implements ContextFormatter {
         return formatSingleIntentContext(kbIntents.get(0), rerankedByIntent, topK);
     }
 
-    /**
-     * 格式化单意图上下文
-     */
     private String formatSingleIntentContext(NodeScore nodeScore, Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {
         List<RetrievedChunk> chunks = rerankedByIntent.get(nodeScore.getNode().getId());
         if (CollUtil.isEmpty(chunks)) {
@@ -69,11 +64,7 @@ public class DefaultContextFormatter implements ContextFormatter {
         return renderKbSection(renderSnippetRules(snippet), body);
     }
 
-    /**
-     * 格式化多意图上下文
-     */
     private String formatMultiIntentContext(List<NodeScore> kbIntents, Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {
-        // 1. 合并所有意图的回答规则
         List<String> snippets = kbIntents.stream()
                 .map(ns -> ns.getNode().getPromptSnippet())
                 .filter(StrUtil::isNotBlank)
@@ -89,7 +80,6 @@ public class DefaultContextFormatter implements ContextFormatter {
             snippetSection = renderSnippetRules(numberedRules);
         }
 
-        // 2. 合并所有意图的文档片段（去重）
         List<RetrievedChunk> allChunks = rerankedByIntent.values().stream()
                 .flatMap(List::stream)
                 .distinct()
@@ -134,8 +124,7 @@ public class DefaultContextFormatter implements ContextFormatter {
     }
 
     @Override
-    public String formatMcpContext(Map<String, List<CallToolResult>> toolResults,
-                                   List<NodeScore> mcpIntents) {
+    public String formatMcpContext(Map<String, List<String>> toolResults, List<NodeScore> mcpIntents) {
         if (CollUtil.isEmpty(toolResults)) {
             return "";
         }
@@ -154,7 +143,7 @@ public class DefaultContextFormatter implements ContextFormatter {
 
         return toolToIntent.entrySet().stream()
                 .map(entry -> {
-                    List<CallToolResult> results = toolResults.get(entry.getKey());
+                    List<String> results = toolResults.get(entry.getKey());
                     if (CollUtil.isEmpty(results)) {
                         return "";
                     }
@@ -175,8 +164,6 @@ public class DefaultContextFormatter implements ContextFormatter {
                 .filter(StrUtil::isNotBlank)
                 .collect(Collectors.joining("\n\n"));
     }
-
-    // ==================== 工具方法 ====================
 
     private String renderKbSection(String snippetSection, String chunksBody) {
         return templateLoader.renderSection(CONTEXT_FORMAT_PATH, "kb-section", Map.of(
@@ -199,55 +186,19 @@ public class DefaultContextFormatter implements ContextFormatter {
                 .collect(Collectors.joining("\n"));
     }
 
-    private String mergeAllResultsToText(Map<String, List<CallToolResult>> toolResults) {
-        List<CallToolResult> allResults = toolResults.values().stream()
+    private String mergeAllResultsToText(Map<String, List<String>> toolResults) {
+        return mergeResultsToText(toolResults.values().stream()
                 .flatMap(List::stream)
-                .toList();
-        return mergeResultsToText(allResults);
+                .toList());
     }
 
-    /**
-     * 将多个 CallToolResult 合并为文本
-     */
-    private String mergeResultsToText(List<CallToolResult> results) {
+    private String mergeResultsToText(List<String> results) {
         if (CollUtil.isEmpty(results)) {
             return "";
         }
-
-        List<String> successTexts = new ArrayList<>();
-        List<String> errorTexts = new ArrayList<>();
-
-        for (CallToolResult result : results) {
-            boolean isError = result.isError() != null && result.isError();
-            String text = extractTextContent(result);
-            if (!isError && text != null) {
-                successTexts.add(text);
-            } else if (isError && text != null) {
-                errorTexts.add("- 工具调用失败: " + text);
-            }
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (String text : successTexts) {
-            sb.append(text).append("\n\n");
-        }
-
-        if (CollUtil.isNotEmpty(errorTexts)) {
-            String errorList = String.join("\n", errorTexts);
-            sb.append(templateLoader.renderSection(CONTEXT_FORMAT_PATH, "mcp-error", Map.of("error_list", errorList)));
-        }
-
-        return sb.toString().trim();
-    }
-
-    private String extractTextContent(CallToolResult result) {
-        if (result == null || result.content() == null) {
-            return null;
-        }
-        List<String> texts = result.content().stream()
-                .filter(c -> c instanceof TextContent)
-                .map(c -> ((TextContent) c).text())
-                .toList();
-        return texts.isEmpty() ? null : String.join("\n", texts);
+        return results.stream()
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining("\n\n"))
+                .trim();
     }
 }

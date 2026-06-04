@@ -24,6 +24,7 @@ import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScoreFilters;
 import com.nageoffer.ai.ragent.rag.core.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.rag.core.retrieve.channel.strategy.IntentParallelRetriever;
+import com.nageoffer.ai.ragent.rag.dto.SubQuestionIntent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -70,7 +71,7 @@ public class IntentDirectedSearchChannel implements SearchChannel {
         }
 
         // 检查是否有 KB 意图（而不仅仅是有意图）
-        if (CollUtil.isEmpty(context.getIntents())) {
+        if (context.getSubIntent() == null) {
             return false;
         }
 
@@ -84,7 +85,7 @@ public class IntentDirectedSearchChannel implements SearchChannel {
         long startTime = System.currentTimeMillis();
 
         try {
-            // 提取 KB 意图
+            // 提取 KB 意图, 并过滤掉分数过低的意图
             List<NodeScore> kbIntents = extractKbIntents(context);
 
             // 并行检索所有意图对应的知识库
@@ -129,10 +130,10 @@ public class IntentDirectedSearchChannel implements SearchChannel {
      * 提取 KB 意图
      */
     private List<NodeScore> extractKbIntents(SearchContext context) {
+        // 检查 KB 意图分数阈值，过滤掉分数过低的意图
         double minScore = properties.getChannels().getIntentDirected().getMinIntentScore();
-        List<NodeScore> allScores = context.getIntents().stream()
-                .flatMap(si -> si.nodeScores().stream())
-                .toList();
+        SubQuestionIntent subIntent = context.getSubIntent();
+        List<NodeScore> allScores = subIntent != null ? subIntent.nodeScores() : List.of();
         return NodeScoreFilters.kb(allScores, minScore);
     }
 

@@ -22,11 +22,7 @@ import com.alibaba.ttl.threadpool.TtlExecutors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 
 /**
  * 线程池执行器配置类
@@ -120,8 +116,8 @@ public class ThreadPoolExecutorConfig {
      * 意图识别并行执行线程池
      */
     @Bean
-    public Executor intentClassifyExecutor() {
-        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+    public ExecutorService intentClassifyExecutor() {
+        ExecutorService executor = new ThreadPoolExecutor(
                 CPU_COUNT,
                 CPU_COUNT << 1,
                 60,
@@ -132,7 +128,7 @@ public class ThreadPoolExecutorConfig {
                         .build(),
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
-        return TtlExecutors.getTtlExecutor(executor);
+        return TtlExecutors.getTtlExecutorService(executor);
     }
 
     /**

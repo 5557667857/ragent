@@ -47,17 +47,56 @@ public class FixedSizeTextChunker implements ChunkingStrategy {
         return ChunkingMode.FIXED_SIZE;
     }
 
+    /**
+     * 将整篇文档文本切分为多个固定长度（带重叠）的 {@link VectorChunk}。
+     *
+     * <p>调用链：{@code runChunkProcess} → {@code chunkingStrategy.chunk(text, config)} → 本方法。</p>
+     *
+     * <p>算法概要（滑动窗口 + 边界对齐）：</p>
+     * <pre>
+     *  normalized = normalizeText(text)     // 预处理，不改动语义段落结构
+     *  start = 0
+     *  while start &lt; len:
+     *      targetEnd = start + chunkSize    // 理想切分点
+     *      end       = 在 [targetEnd-overlap, targetEnd] 内向前找换行/句末标点
+     *      产出 normalized[start:end] 为一个 chunk
+     *      start = end - overlap            // 下一块与当前块尾部重叠 overlap 字符
+     * </pre>
+     *
+     * <p>配置项（{@link FixedSizeOptions}）：</p>
+     * <ul>
+     *   <li>{@code chunkSize == -1}：不切分，整篇作为一个 chunk（小文档或调试场景）</li>
+     *   <li>{@code chunkSize}：单块目标最大字符数（按 Java {@code char} 计，非 token）</li>
+     *   <li>{@code overlapSize}：相邻块尾部与下一块头部的重叠字符数，利于检索时上下文连贯</li>
+     * </ul>
+     *
+     * <p>示例（chunkSize=10, overlap=2）：</p>
+     * <pre>
+     *  文本: "ABCDEFGHIJKLMNOP"
+     *  chunk0: [0,10)  "ABCDEFGHIJ"
+     *  chunk1: [8,18)  "IJKLMNOP"   // start = 10-2 = 8，与 chunk0 尾部 "IJ" 重叠
+     * </pre>
+     *
+     * <p>注意：本方法只填充 {@code chunkId}/{@code index}/{@code content}，不计算 {@code embedding}，
+     * 向量化由后续的 {@code ChunkEmbeddingService#embed} 完成。</p>
+     *
+     * @param text   Tika 等解析器抽取出的纯文本
+     * @param config 分块参数，实际类型为 {@link FixedSizeOptions}
+     * @return 按文档顺序排列的分块列表；空文本返回空列表
+     */
     @Override
     public List<VectorChunk> chunk(String text, ChunkingOptions config) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }
 
-        // 1) 更保守的归一化：只修 URL 明显断行，不吞正常换行
+        // 预处理：修复 URL/中文词被 PDF 换行拆开等问题，避免在错误位置硬切
         String normalized = normalizeText(text);
 
         FixedSizeOptions opts = (FixedSizeOptions) config;
         int configuredChunkSize = opts.chunkSize();
+
+        // chunkSize=-1 表示“整篇不切块”，常用于短文档或用户显式关闭分块
         if (configuredChunkSize == -1) {
             return List.of(VectorChunk.builder()
                     .chunkId(IdUtil.getSnowflakeNextIdStr())
@@ -66,9 +105,9 @@ public class FixedSizeTextChunker implements ChunkingStrategy {
                     .build());
         }
 
+        // 合法化参数：chunkSize 至少为 1；overlap 不超过 chunkSize-1，否则下一块起点无法前进
         int chunkSize = Math.max(1, configuredChunkSize);
         int overlap = Math.max(0, opts.overlapSize());
-
         if (chunkSize > 1) {
             overlap = Math.min(overlap, chunkSize - 1);
         } else {
@@ -78,19 +117,25 @@ public class FixedSizeTextChunker implements ChunkingStrategy {
         int len = normalized.length();
         List<VectorChunk> chunks = new ArrayList<>();
 
-        int index = 0;
-        int start = 0;
-        int lastEnd = -1;
+        int index = 0;       // 当前 chunk 在文档中的序号（0,1,2,...）
+        int start = 0;       // 当前窗口在 normalized 中的起始下标（含）
+        int lastEnd = -1;    // 上一块的结束下标，用于检测边界回退导致的“卡住/重复”
 
+        // 滑动窗口：每次从 start 向前取最多 chunkSize 个字符作为一个候选块
         while (start < len) {
+            // 1) 计算理想结束位置（不考虑句子边界时的硬切点）
             int targetEnd = Math.min(start + chunkSize, len);
+
+            // 2) 在 targetEnd 附近向前最多 overlap 字符内，优先在换行/句末标点处断开
             int end = adjustToBoundary(normalized, start, targetEnd, overlap);
 
-            // 强制推进，避免回退过头导致重复/停滞
+            // 3) 安全阀：若边界对齐导致 end 未前进（≤start 或 ≤lastEnd），退回硬切 targetEnd，
+            //    防止无限循环或产出与上一块几乎相同的重复内容
             if (end <= start || end <= lastEnd) {
                 end = targetEnd;
             }
 
+            // 4) 截取 [start, end) 作为本块正文；跳过仅空白的内容（如连续空行边界）
             String content = normalized.substring(start, end);
             if (StringUtils.hasText(content.strip())) {
                 chunks.add(VectorChunk.builder()
@@ -101,10 +146,16 @@ public class FixedSizeTextChunker implements ChunkingStrategy {
             }
 
             lastEnd = end;
-            if (end >= len) break;
+            if (end >= len) {
+                break;
+            }
 
+            // 5) 下一块起点：默认从 (end - overlap) 开始，使相邻块共享尾部 overlap 字符
             int nextStart = Math.max(0, end - overlap);
-            if (nextStart <= start) nextStart = end;
+            // 若 overlap 为 0 或计算后 nextStart 仍 ≤ start，则至少推进到 end，保证窗口向前移动
+            if (nextStart <= start) {
+                nextStart = end;
+            }
             start = nextStart;
         }
 

@@ -31,7 +31,8 @@ import com.nageoffer.ai.ragent.ingestion.domain.settings.EnricherSettings;
 import com.nageoffer.ai.ragent.ingestion.prompt.EnricherPromptManager;
 import com.nageoffer.ai.ragent.ingestion.util.JsonResponseParser;
 import com.nageoffer.ai.ragent.ingestion.util.PromptTemplateRenderer;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -47,11 +48,11 @@ import java.util.Map;
 public class EnricherNode implements IngestionNode {
 
     private final ObjectMapper objectMapper;
-    private final LLMService llmService;
+    private final ChatModel chatModel;
 
-    public EnricherNode(ObjectMapper objectMapper, LLMService llmService) {
+    public EnricherNode(ObjectMapper objectMapper, ChatModel chatModel) {
         this.objectMapper = objectMapper;
-        this.llmService = llmService;
+        this.chatModel = chatModel;
     }
 
     @Override
@@ -95,7 +96,7 @@ public class EnricherNode implements IngestionNode {
                                 ChatMessage.user(userPrompt)
                         ))
                         .build();
-                String response = chat(request, settings.getModelId());
+                String response = chat(request);
                 applyResult(chunk, type, response);
             }
         }
@@ -134,7 +135,7 @@ public class EnricherNode implements IngestionNode {
         }
     }
 
-    private String chat(ChatRequest request, String modelId) {
-        return llmService.chat(request, modelId);
+    private String chat(ChatRequest request) {
+        return SpringAiChatSupport.chat(chatModel, request);
     }
 }

@@ -71,7 +71,7 @@ public class ChunkerNode implements IngestionNode {
         List<VectorChunk> chunks = convertToVectorChunks(results);
 
         // 嵌入：为切分后的文本块生成向量
-        chunkEmbeddingService.embed(chunks, null);
+        chunkEmbeddingService.embed(chunks);
 
         context.setChunks(chunks);
         return NodeResult.ok("已分块 " + chunks.size() + " 段");

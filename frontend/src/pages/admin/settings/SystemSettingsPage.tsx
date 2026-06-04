@@ -121,7 +121,6 @@ export function SystemSettingsPage() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
           <InfoItem label="History Keep Turns" value={rag.memory.historyKeepTurns} />
-          <InfoItem label="Summary Start Turns" value={rag.memory.summaryStartTurns} />
           <InfoItem
             label="Summary Enabled"
             value={<BoolBadge value={rag.memory.summaryEnabled} />}

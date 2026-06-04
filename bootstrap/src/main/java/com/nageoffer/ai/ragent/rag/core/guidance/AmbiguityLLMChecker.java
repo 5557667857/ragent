@@ -22,13 +22,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
-import com.nageoffer.ai.ragent.infra.util.LLMResponseCleaner;
+
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -46,7 +47,7 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.GUIDANCE_AMBIGUIT
 @RequiredArgsConstructor
 public class AmbiguityLLMChecker {
 
-    private final LLMService llmService;
+    private final ChatModel chatModel;
     private final PromptTemplateLoader promptTemplateLoader;
 
     /**
@@ -72,9 +73,8 @@ public class AmbiguityLLMChecker {
                 .build();
 
         try {
-            String raw = llmService.chat(request);
-            String cleaned = LLMResponseCleaner.stripMarkdownCodeFence(raw);
-            JsonElement root = JsonParser.parseString(cleaned);
+            String raw = SpringAiChatSupport.chat(chatModel, request);
+            JsonElement root = JsonParser.parseString(raw);
 
             if (!root.isJsonObject()) {
                 log.warn("歧义确认 LLM 返回非 JSON 对象: {}", raw);

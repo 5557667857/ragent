@@ -90,15 +90,14 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
         String bucketName = requestParam.getCollectionName();
         try {
+            // 阿里云 OSS 不支持 LocationConstraint，使用 Consumer 方式避免发送该参数
             s3Client.createBucket(builder -> builder.bucket(bucketName));
-            log.info("成功创建RestFS存储桶，Bucket名称: {}", bucketName);
-        } catch (BucketAlreadyOwnedByYouException | BucketAlreadyExistsException e) {
-            if (e instanceof BucketAlreadyOwnedByYouException) {
-                log.error("RestFS存储桶已存在，Bucket名称: {}", bucketName, e);
-            } else {
-                log.error("RestFS存储桶已存在但由其他账户拥有，Bucket名称: {}", bucketName, e);
-            }
-            throw new ServiceException("存储桶名称已被占用：" + bucketName);
+            log.info("成功创建OSS存储桶，Bucket名称: {}", bucketName);
+        } catch (BucketAlreadyOwnedByYouException e) {
+            log.warn("OSS存储桶已存在（当前账户），Bucket名称: {}", bucketName);
+        } catch (BucketAlreadyExistsException e) {
+            log.error("OSS存储桶已被其他账户占用，Bucket名称: {}", bucketName, e);
+            throw new ServiceException("存储桶名称已被占用：" + bucketName + "，请尝试使用其他名称");
         }
 
         VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()

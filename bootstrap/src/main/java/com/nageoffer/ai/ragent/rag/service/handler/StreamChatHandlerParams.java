@@ -17,7 +17,6 @@
 
 package com.nageoffer.ai.ragent.rag.service.handler;
 
-import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
 import com.nageoffer.ai.ragent.rag.core.memory.ConversationMemoryService;
 import com.nageoffer.ai.ragent.rag.service.ConversationGroupService;
 import lombok.Builder;
@@ -48,9 +47,9 @@ public class StreamChatHandlerParams {
     private final String taskId;
 
     /**
-     * 模型配置
+     * 流式消息分块大小
      */
-    private final AIModelProperties modelProperties;
+    private final int messageChunkSize;
 
     /**
      * 记忆服务

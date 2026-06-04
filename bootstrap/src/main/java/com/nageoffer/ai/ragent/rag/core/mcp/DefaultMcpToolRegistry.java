@@ -17,107 +17,60 @@
 
 package com.nageoffer.ai.ragent.rag.core.mcp;
 
-import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * MCP 工具注册表默认实现
+ * Default MCP tool registry backed by Spring AI MCP tool callbacks.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultMcpToolRegistry implements McpToolRegistry {
 
-    /**
-     * 工具执行器存储
-     * key: toolId, value: executor
-     */
-    private final Map<String, McpToolExecutor> executorMap = new HashMap<>();
+    private final Map<String, ToolCallback> toolCallbackMap = new HashMap<>();
 
-    /**
-     * Spring 容器中的所有 McpToolExecutor Bean（自动注入）
-     */
-    private final List<McpToolExecutor> autoDiscoveredExecutors;
+    private final SyncMcpToolCallbackProvider toolCallbackProvider;
 
-    /**
-     * 启动时自动注册所有发现的执行器
-     */
     @PostConstruct
     public void init() {
-        if (CollUtil.isEmpty(autoDiscoveredExecutors)) {
-            log.info("MCP 工具注册跳过, 未发现任何工具执行器");
+        for (ToolCallback toolCallback : toolCallbackProvider.getToolCallbacks()) {
+            register(toolCallback);
         }
-
-        for (McpToolExecutor executor : autoDiscoveredExecutors) {
-            register(executor);
-        }
-        log.info("MCP 工具自动注册完成, 共注册 {} 个工具", autoDiscoveredExecutors.size());
+        log.info("MCP tools registered from Spring AI, total={}", toolCallbackMap.size());
     }
 
-    @Override
-    public void register(McpToolExecutor executor) {
-        if (executor == null || executor.getToolDefinition() == null) {
-            log.warn("尝试注册空的执行器，已忽略");
+    private void register(ToolCallback toolCallback) {
+        if (toolCallback == null || toolCallback.getToolDefinition() == null) {
+            log.warn("Skip empty MCP tool callback");
             return;
         }
 
-        String toolId = executor.getToolId();
+        String toolId = toolCallback.getToolDefinition().name();
         if (StrUtil.isBlank(toolId)) {
-            log.warn("工具 ID 为空，已忽略");
+            log.warn("Skip MCP tool with blank toolId");
             return;
         }
 
-        McpToolExecutor existing = executorMap.put(toolId, executor);
+        ToolCallback existing = toolCallbackMap.put(toolId, toolCallback);
         if (existing != null) {
-            log.warn("工具 {} 已存在，已覆盖", toolId);
+            log.warn("MCP tool {} already exists and has been overwritten", toolId);
         } else {
-            log.info("MCP 工具注册成功, toolId: {}", toolId);
+            log.info("MCP tool registered, toolId={}", toolId);
         }
     }
 
     @Override
-    public void unregister(String toolId) {
-        McpToolExecutor removed = executorMap.remove(toolId);
-        if (removed != null) {
-            log.info("MCP 工具注销成功, toolId: {}", toolId);
-        }
-    }
-
-    @Override
-    public Optional<McpToolExecutor> getExecutor(String toolId) {
-        return Optional.ofNullable(executorMap.get(toolId));
-    }
-
-    @Override
-    public List<Tool> listAllTools() {
-        return executorMap.values().stream()
-                .map(McpToolExecutor::getToolDefinition)
-                .toList();
-    }
-
-    @Override
-    public List<McpToolExecutor> listAllExecutors() {
-        return new ArrayList<>(executorMap.values());
-    }
-
-    @Override
-    public boolean contains(String toolId) {
-        return executorMap.containsKey(toolId);
-    }
-
-    @Override
-    public int size() {
-        return executorMap.size();
+    public Optional<ToolCallback> getToolCallback(String toolId) {
+        return Optional.ofNullable(toolCallbackMap.get(toolId));
     }
 }

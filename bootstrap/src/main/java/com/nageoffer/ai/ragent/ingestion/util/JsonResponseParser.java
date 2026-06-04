@@ -22,7 +22,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-import com.nageoffer.ai.ragent.infra.util.LLMResponseCleaner;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -59,8 +58,7 @@ public final class JsonResponseParser {
         if (StrUtil.isBlank(raw)) {
             return null;
         }
-        String cleaned = LLMResponseCleaner.stripMarkdownCodeFence(raw);
-        String trimmed = extractJsonBody(cleaned);
+        String trimmed = extractJsonBody(raw);
         try {
             return JsonParser.parseString(trimmed);
         } catch (JsonSyntaxException e) {

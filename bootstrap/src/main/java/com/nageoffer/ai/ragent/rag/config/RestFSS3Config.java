@@ -42,13 +42,17 @@ public class RestFSS3Config {
                              @Value("${rustfs.secret-access-key}") String secretAccessKey) {
         return S3Client.builder()
                 .endpointOverride(URI.create(rustfsUrl))
+                // 使用 us-east-1 避免 SDK 自动添加 LocationConstraint（阿里云 OSS 不支持）
                 .region(Region.US_EAST_1)
                 .credentialsProvider(
                         StaticCredentialsProvider.create(
                                 AwsBasicCredentials.create(accessKeyId, secretAccessKey)
                         )
                 )
-                .forcePathStyle(true)
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(false)
+                        .chunkedEncodingEnabled(false)
+                        .build())
                 .build();
     }
 
@@ -62,14 +66,14 @@ public class RestFSS3Config {
                                    @Value("${rustfs.secret-access-key}") String secretAccessKey) {
         return S3Presigner.builder()
                 .endpointOverride(URI.create(rustfsUrl))
-                .region(Region.US_EAST_1)
+                .region(Region.of("cn-beijing"))
                 .credentialsProvider(
                         StaticCredentialsProvider.create(
                                 AwsBasicCredentials.create(accessKeyId, secretAccessKey)
                         )
                 )
                 .serviceConfiguration(S3Configuration.builder()
-                        .pathStyleAccessEnabled(true)
+                        .pathStyleAccessEnabled(false)
                         .build())
                 .build();
     }

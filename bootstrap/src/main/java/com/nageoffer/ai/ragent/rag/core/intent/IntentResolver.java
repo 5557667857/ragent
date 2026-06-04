@@ -29,11 +29,13 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.HashMap;
-import java.util.concurrent.Executor;
+import java.util.Set;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.INTENT_MIN_SCORE;
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MAX_INTENT_COUNT;
@@ -46,29 +48,41 @@ public class IntentResolver {
 
     @Qualifier("defaultIntentClassifier")
     private final IntentClassifier intentClassifier;
-    private final Executor intentClassifyExecutor;
+    @Qualifier("intentClassifyExecutor")
+    private final ExecutorService intentClassifyExecutor;
 
     @RagTraceNode(name = "intent-resolve", type = "INTENT")
     public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {
         List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
                 ? rewriteResult.subQuestions()
                 : List.of(rewriteResult.rewrittenQuestion());
-        List<CompletableFuture<SubQuestionIntent>> tasks = subQuestions.stream()
-                .map(q -> CompletableFuture.supplyAsync(
-                        () -> {
-                            try {
-                                return new SubQuestionIntent(q, classifyIntents(q));
-                            } catch (Exception e) {
-                                log.error("子问题意图分类失败，降级为空意图，question：{}", q, e);
-                                return new SubQuestionIntent(q, List.of());
-                            }
-                        },
-                        intentClassifyExecutor
-                ))
+        
+        List<Future<SubQuestionIntent>> futures = new ArrayList<>();
+        for (String q : subQuestions) {
+            futures.add(intentClassifyExecutor.submit(() -> {
+                try {
+                    return new SubQuestionIntent(q, classifyIntents(q));
+                } catch (Exception e) {
+                    log.error("子问题意图分类失败，降级为空意图，question：{}", q, e);
+                    return new SubQuestionIntent(q, List.of());
+                }
+            }));
+        }
+
+        List<SubQuestionIntent> subIntents = futures.stream()
+                .map(future -> {
+                    try {
+                        return future.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        Thread.currentThread().interrupt();
+                        log.error("获取意图分类结果异常", e);
+                        return null;
+                    }
+                })
+                .filter(item -> item != null)
                 .collect(Collectors.toList());
-        List<SubQuestionIntent> subIntents = tasks.stream()
-                .map(CompletableFuture::join)
-                .collect(Collectors.toList());
+                
+        // 限制总意图数量不超过 MAX_INTENT_COUNT
         return capTotalIntents(subIntents);
     }
 
@@ -155,11 +169,10 @@ public class IntentResolver {
      */
     private List<IntentCandidate> selectTopIntentPerSubQuestion(List<IntentCandidate> allCandidates, int subQuestionCount) {
         List<IntentCandidate> topIntents = new ArrayList<>();
-        boolean[] selected = new boolean[subQuestionCount];
+        Set<Integer> seen = new HashSet<>();
 
         for (IntentCandidate candidate : allCandidates) {
-            int index = candidate.subQuestionIndex();
-            if (!selected[index]) {
+            if (seen.add(candidate.subQuestionIndex())) {
                 topIntents.add(candidate);
                 if (topIntents.size() == subQuestionCount) {
                     break;

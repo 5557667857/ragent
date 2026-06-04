@@ -109,9 +109,7 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
 
     @Override
     public ConversationSummaryDO findLatestSummary(String conversationId, String userId) {
-        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
-            return null;
-        }
+        //得到最新的摘要记录，作为当前对话的摘要
         return summaryMapper.selectOne(
                 Wrappers.lambdaQuery(ConversationSummaryDO.class)
                         .eq(ConversationSummaryDO::getConversationId, conversationId)

@@ -4,3 +4,17 @@ server:
 spring:
   application:
     name: ragent-mcp-server
+  ai:
+    mcp:
+      server:
+        name: ragent-mcp-server
+        version: 1.0.0
+        type: sync
+        protocol: streamable
+        streamable-http:
+          mcp-endpoint: /mcp
+          keep-alive-interval: 30s
+amap:
+  api-key: ${AMAP_API_KEY}
+  connect-timeout-ms: 3000
+  request-timeout-ms: 5000

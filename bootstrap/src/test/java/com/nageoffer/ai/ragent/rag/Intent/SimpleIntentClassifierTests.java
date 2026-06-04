@@ -19,10 +19,13 @@ package com.nageoffer.ai.ragent.rag.Intent;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
+import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -38,7 +41,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class SimpleIntentClassifierTests {
 
-    private final LLMService llmService;
+    private final ChatModel chatModel;
 
     private final Gson gson = new Gson();
 
@@ -48,7 +51,7 @@ public class SimpleIntentClassifierTests {
         String prompt = buildIntentPrompt(question);
 
         long start = System.nanoTime();
-        String chat = llmService.chat(prompt);
+        String chat = chat(prompt);
         long end = System.nanoTime();
 
         System.out.println(chat);
@@ -164,7 +167,7 @@ public class SimpleIntentClassifierTests {
         String prompt = buildCategoryScorePrompt(category, question);
 
         // 这里用简单版 chat(String)，也可以用 ChatRequest
-        String resp = llmService.chat(prompt);
+        String resp = chat(prompt);
 
         // 期望返回：
         // {"score":0.95,"reason":"问题是 Mac 打印机连接，属于 IT 支持场景"}
@@ -231,6 +234,14 @@ public class SimpleIntentClassifierTests {
                         joinedExamples,
                         question
                 );
+    }
+
+    private String chat(String prompt) {
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(ChatMessage.user(prompt)))
+                .thinking(false)
+                .build();
+        return SpringAiChatSupport.chat(chatModel, request);
     }
 
     private enum Category {

@@ -17,7 +17,6 @@
 
 package com.nageoffer.ai.ragent.rag.config;
 
-import com.nageoffer.ai.ragent.rag.config.validation.ValidMemoryConfig;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -34,7 +33,6 @@ import org.springframework.validation.annotation.Validated;
 @Configuration
 @ConfigurationProperties(prefix = "rag.memory")
 @Validated
-@ValidMemoryConfig
 public class MemoryProperties {
 
     /**
@@ -50,16 +48,18 @@ public class MemoryProperties {
     private Boolean summaryEnabled = false;
 
     /**
-     * 开始摘要的轮数阈值
-     */
-    private Integer summaryStartTurns = 9;
-
-    /**
      * 摘要最大字数
      */
     @Min(200)
     @Max(1000)
     private Integer summaryMaxChars = 200;
+
+    /**
+     * 攒批大小：待摘要区间至少攒够该数量的用户消息才调用LLM压缩
+     */
+    @Min(1)
+    @Max(50)
+    private Integer summaryBatchSize = 2;
 
     /**
      * 会话标题最大长度（用于提示词约束）

@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.rag.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.rag.controller.vo.ConversationMessageVO;
@@ -58,21 +59,16 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
 
     @Override
     public List<ConversationMessageVO> listMessages(String conversationId, String userId, Integer limit, ConversationMessageOrder order) {
-        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
-            return List.of();
-        }
-
+        // 1. 校验对话归属：确保这个 conversation 确实属于当前用户，防止越权访问
         ConversationDO conversation = conversationMapper.selectOne(
                 Wrappers.lambdaQuery(ConversationDO.class)
                         .eq(ConversationDO::getConversationId, conversationId)
                         .eq(ConversationDO::getUserId, userId)
                         .eq(ConversationDO::getDeleted, 0)
         );
-        if (conversation == null) {
-            return List.of();
-        }
-
+        // 2. 解析排序方向：null 或 ASC 都视为升序，只有明确传 DESC 才是降序
         boolean asc = order == null || order == ConversationMessageOrder.ASC;
+        // 3. 查询消息记录：按 createTime 排序，limit 用于限制返回条数（null 时不限制）
         List<ConversationMessageDO> records = conversationMessageMapper.selectList(
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
@@ -81,20 +77,25 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
                         .orderBy(true, asc, ConversationMessageDO::getCreateTime)
                         .last(limit != null, "limit " + limit)
         );
-        if (records == null || records.isEmpty()) {
+        // 4. 空结果直接返回，避免后续处理空列表
+        if (CollUtil.isEmpty(records)) {
             return List.of();
         }
 
+        // 5. 降序查询的结果是「最新在前」的倒序，前端展示需要翻转回「最早在前」的时序
         if (!asc) {
             Collections.reverse(records);
         }
 
+        // 6. 筛选出所有 assistant 消息的 ID，用于批量查询用户对每条回复的点赞/点踩状态
         List<String> assistantMessageIds = records.stream()
                 .filter(record -> "assistant".equalsIgnoreCase(record.getRole()))
                 .map(ConversationMessageDO::getId)
                 .toList();
+        // 7. 批量查询当前用户对这些 assistant 消息的投票记录（key=消息ID, value=投票值 1点赞/-1点踩/0无）
         Map<String, Integer> votesByMessageId = feedbackService.getUserVotes(userId, assistantMessageIds);
 
+        // 8. DO → VO 转换：将数据库实体转为前端展示对象，同时把投票信息填充进去
         List<ConversationMessageVO> result = new ArrayList<>();
         for (ConversationMessageDO record : records) {
             ConversationMessageVO vo = ConversationMessageVO.builder()
@@ -104,7 +105,7 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
                     .content(record.getContent())
                     .thinkingContent(record.getThinkingContent())
                     .thinkingDuration(record.getThinkingDuration())
-                    .vote(votesByMessageId.get(record.getId()))
+                    .vote(votesByMessageId.get(record.getId()))  // 从批量查询结果中取出该消息的投票状态
                     .createTime(record.getCreateTime())
                     .build();
             result.add(vo);

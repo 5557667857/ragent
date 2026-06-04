@@ -17,12 +17,11 @@
 
 package com.nageoffer.ai.ragent.rag.Intent;
 
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentTreeFactory;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -33,7 +32,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class VectorIntentClassifier {
 
-    private final EmbeddingService embeddingService;
+    private final EmbeddingModel embeddingModel;
 
     /**
      * 整棵树所有节点
@@ -64,7 +63,7 @@ public class VectorIntentClassifier {
         // 3. 为所有节点预计算向量（也可以只算 targetNodes，看你后面是否想用到）
         for (IntentNode node : allNodes) {
             String text = buildNodeText(node);
-            float[] vec = toArray(embeddingService.embed(text));
+            float[] vec = embeddingModel.embed(text);
             node.setEmbedding(vec);
         }
 
@@ -100,14 +99,6 @@ public class VectorIntentClassifier {
         return sb.toString();
     }
 
-    private float[] toArray(List<Float> list) {
-        float[] arr = new float[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            arr[i] = list.get(i);
-        }
-        return arr;
-    }
-
     private double cosine(float[] a, float[] b) {
         double dot = 0, na = 0, nb = 0;
         for (int i = 0; i < a.length; i++) {
@@ -125,7 +116,7 @@ public class VectorIntentClassifier {
      * - 每一个 NodeScore 就是一个“可以直接挂知识库”的分类目标。
      */
     public List<NodeScore> classifyTargets(String question) {
-        float[] qVec = toArray(embeddingService.embed(question));
+        float[] qVec = embeddingModel.embed(question);
 
         return targetNodes.stream()
                 .map(n -> new NodeScore(n, cosine(qVec, n.getEmbedding())))

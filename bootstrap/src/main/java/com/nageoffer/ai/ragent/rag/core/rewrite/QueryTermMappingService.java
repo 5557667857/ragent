@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.rag.core.rewrite;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.rag.dao.entity.QueryTermMappingDO;
 import com.nageoffer.ai.ragent.rag.dao.mapper.QueryTermMappingMapper;
@@ -25,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -44,7 +46,7 @@ public class QueryTermMappingService {
         if (text == null || text.isEmpty()) {
             return text;
         }
-
+        // 从缓存加载映射规则
         List<QueryTermMappingDO> mappings = loadMappings();
         if (mappings.isEmpty()) {
             return text;
@@ -52,18 +54,7 @@ public class QueryTermMappingService {
 
         String result = text;
         for (QueryTermMappingDO mapping : mappings) {
-            if (mapping.getEnabled() == null || mapping.getEnabled() == 0) {
-                continue;
-            }
-            if (mapping.getMatchType() != null && mapping.getMatchType() != 1) {
-                continue;
-            }
-            String source = mapping.getSourceTerm();
-            String target = mapping.getTargetTerm();
-            if (source == null || source.isEmpty() || target == null || target.isEmpty()) {
-                continue;
-            }
-            result = QueryTermMappingUtil.applyMapping(result, source, target);
+            result = QueryTermMappingUtil.applyMapping(result, mapping.getSourceTerm(), mapping.getTargetTerm());
         }
 
         if (!Objects.equals(text, result)) {
@@ -76,9 +67,10 @@ public class QueryTermMappingService {
      * 加载映射规则：优先从 Redis 缓存读取，缓存未命中则从数据库加载并回填缓存
      */
     private List<QueryTermMappingDO> loadMappings() {
+        // 从 Redis 缓存读取
         List<QueryTermMappingDO> cached = cacheManager.getMappingsFromCache();
         if (CollUtil.isNotEmpty(cached)) {
-            return cached;
+            return filterApplicableMappings(cached);
         }
 
         // 缓存未命中，从数据库加载
@@ -86,14 +78,33 @@ public class QueryTermMappingService {
                 Wrappers.lambdaQuery(QueryTermMappingDO.class)
                         .eq(QueryTermMappingDO::getEnabled, 1)
         );
-        dbList.sort(Comparator
+        List<QueryTermMappingDO> applicable = new ArrayList<>(filterApplicableMappings(dbList));
+        sortMappings(applicable);
+
+        // 回填 Redis 缓存
+        cacheManager.saveMappingsToCache(applicable);
+        log.info("术语映射规则从数据库加载完成，共 {} 条规则", applicable.size());
+        return applicable;
+    }
+
+    /**
+     * 仅保留当前运行时支持的规则：已启用、精确匹配、源/目标词非空。
+     */
+    private List<QueryTermMappingDO> filterApplicableMappings(List<QueryTermMappingDO> mappings) {
+        if (CollUtil.isEmpty(mappings)) {
+            return List.of();
+        }
+        return mappings.stream()
+                .filter(m -> m.getEnabled() != null && m.getEnabled() == 1)
+                .filter(m -> m.getMatchType() == null || m.getMatchType() == 1)
+                .filter(m -> StrUtil.isNotBlank(m.getSourceTerm()) && StrUtil.isNotBlank(m.getTargetTerm()))
+                .toList();
+    }
+
+    private void sortMappings(List<QueryTermMappingDO> mappings) {
+        mappings.sort(Comparator
                 .comparing(QueryTermMappingDO::getPriority, Comparator.nullsLast(Integer::compareTo)).reversed()
                 .thenComparing(m -> m.getSourceTerm() == null ? 0 : m.getSourceTerm().length(), Comparator.reverseOrder())
         );
-
-        // 回填 Redis 缓存
-        cacheManager.saveMappingsToCache(dbList);
-        log.info("术语映射规则从数据库加载完成，共 {} 条规则", dbList.size());
-        return dbList;
     }
 }

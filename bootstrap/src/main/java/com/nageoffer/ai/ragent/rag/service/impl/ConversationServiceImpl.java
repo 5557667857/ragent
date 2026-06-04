@@ -32,12 +32,13 @@ import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiChatSupport;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
 import com.nageoffer.ai.ragent.rag.service.ConversationService;
 import com.nageoffer.ai.ragent.rag.service.bo.ConversationCreateBO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,7 +62,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ConversationSummaryMapper summaryMapper;
     private final MemoryProperties memoryProperties;
     private final PromptTemplateLoader promptTemplateLoader;
-    private final LLMService llmService;
+    private final ChatModel chatModel;
 
     @Override
     public List<ConversationVO> listByUserId(String userId) {
@@ -204,7 +205,7 @@ public class ConversationServiceImpl implements ConversationService {
                     .thinking(false)
                     .build();
 
-            return llmService.chat(request);
+            return SpringAiChatSupport.chat(chatModel, request);
         } catch (Exception ex) {
             log.warn("生成会话标题失败", ex);
             return "新对话";

@@ -52,6 +52,7 @@ public class JdbcConversationMemoryStore implements ConversationMemoryStore {
 
     @Override
     public List<ChatMessage> loadHistory(String conversationId, String userId) {
+        //maxMessages为2*historyKeepTurns，确保能加载足够的历史消息进行上下文回顾，同时避免一次性加载过多消息导致性能问题
         int maxMessages = resolveMaxHistoryMessages();
         List<ConversationMessageVO> dbMessages = conversationMessageService.listMessages(
                 conversationId,
@@ -62,12 +63,11 @@ public class JdbcConversationMemoryStore implements ConversationMemoryStore {
         if (CollUtil.isEmpty(dbMessages)) {
             return List.of();
         }
-
         List<ChatMessage> result = dbMessages.stream()
                 .map(this::toChatMessage)
                 .filter(this::isHistoryMessage)
                 .collect(Collectors.toList());
-
+        //防御性代码，防止用户输入的会话内容为空，导致历史消息列表中出现大量无效的助手消息
         return normalizeHistory(result);
     }
 

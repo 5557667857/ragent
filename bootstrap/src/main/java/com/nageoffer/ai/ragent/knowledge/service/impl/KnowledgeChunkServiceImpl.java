@@ -41,13 +41,14 @@ import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.infra.token.TokenCounterService;
 import com.nageoffer.ai.ragent.knowledge.enums.DocumentStatus;
+import com.nageoffer.ai.ragent.rag.core.llm.SpringAiEmbeddingSupport;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
@@ -69,7 +70,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
     private final KnowledgeChunkMapper chunkMapper;
     private final KnowledgeDocumentMapper documentMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
-    private final EmbeddingService embeddingService;
+    private final EmbeddingModel embeddingModel;
     private final TokenCounterService tokenCounterService;
     private final VectorStoreService vectorStoreService;
     private final TransactionOperations transactionOperations;
@@ -531,15 +532,11 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
     }
 
     private List<Float> embedContent(String content, String embeddingModel) {
-        return StrUtil.isBlank(embeddingModel)
-                ? embeddingService.embed(content)
-                : embeddingService.embed(content, embeddingModel);
+        return SpringAiEmbeddingSupport.embedAsList(this.embeddingModel, content);
     }
 
     private List<List<Float>> embedBatch(List<String> texts, String embeddingModel) {
-        return StrUtil.isBlank(embeddingModel)
-                ? embeddingService.embedBatch(texts)
-                : embeddingService.embedBatch(texts, embeddingModel);
+        return SpringAiEmbeddingSupport.embedBatchAsList(this.embeddingModel, texts);
     }
 
     private Integer resolveTokenCount(String content) {

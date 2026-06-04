@@ -20,7 +20,6 @@ package com.nageoffer.ai.ragent.rag.core.retrieve;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.rag.config.RAGDefaultProperties;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.data.BaseVector;
@@ -28,6 +27,7 @@ import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -43,16 +43,13 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "rag.vector.type", havingValue = "milvus", matchIfMissing = true)
 public class MilvusRetrieverService implements RetrieverService {
 
-    private final EmbeddingService embeddingService;
+    private final EmbeddingModel embeddingModel;
     private final MilvusClientV2 milvusClient;
     private final RAGDefaultProperties ragDefaultProperties;
 
     @Override
     public List<RetrievedChunk> retrieve(RetrieveRequest retrieveParam) {
-        List<Float> emb = embeddingService.embed(retrieveParam.getQuery());
-        float[] vec = toArray(emb);
-
-        float[] norm = normalize(vec);
+        float[] norm = normalize(embeddingModel.embed(retrieveParam.getQuery()));
 
         return retrieveByVector(norm, retrieveParam);
     }
@@ -91,12 +88,6 @@ public class MilvusRetrieverService implements RetrieverService {
                         Objects.toString(r.getEntity().get("content"), ""),
                         r.getScore()))
                 .collect(Collectors.toList());
-    }
-
-    private static float[] toArray(List<Float> list) {
-        float[] arr = new float[list.size()];
-        for (int i = 0; i < list.size(); i++) arr[i] = list.get(i);
-        return arr;
     }
 
     private static float[] normalize(float[] v) {

@@ -57,14 +57,14 @@ public class MultiChannelRetrievalEngine {
     /**
      * 执行多通道检索（仅 KB 场景）
      *
-     * @param subIntents 子问题意图列表
+     * @param subIntent 子问题意图列表
      * @param topK       期望返回的结果数量
      * @return 检索到的 Chunk 列表
      */
     @RagTraceNode(name = "multi-channel-retrieval", type = "RETRIEVE_CHANNEL")
-    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents, int topK) {
+    public List<RetrievedChunk> retrieveKnowledgeChannels(SubQuestionIntent subIntent, int topK) {
         // 构建检索上下文
-        SearchContext context = buildSearchContext(subIntents, topK);
+        SearchContext context = buildSearchContext(subIntent, topK);
 
         // 【阶段1：多通道并行检索】
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
@@ -80,7 +80,7 @@ public class MultiChannelRetrievalEngine {
      * 执行所有启用的检索通道
      */
     private List<SearchChannelResult> executeSearchChannels(SearchContext context) {
-        // 过滤启用的通道
+        // 过滤启用的通道,优先级升序
         List<SearchChannel> enabledChannels = searchChannels.stream()
                 .filter(channel -> channel.isEnabled(context))
                 .sorted(Comparator.comparingInt(SearchChannel::getPriority))
@@ -206,13 +206,13 @@ public class MultiChannelRetrievalEngine {
     /**
      * 构建检索上下文
      */
-    private SearchContext buildSearchContext(List<SubQuestionIntent> subIntents, int topK) {
-        String question = CollUtil.isEmpty(subIntents) ? "" : subIntents.get(0).subQuestion();
+    private SearchContext buildSearchContext(SubQuestionIntent subIntent, int topK) {
+        String question = subIntent != null ? subIntent.subQuestion() : "";
 
         return SearchContext.builder()
                 .originalQuestion(question)
                 .rewrittenQuestion(question)
-                .intents(subIntents)
+                .subIntent(subIntent)
                 .topK(topK)
                 .build();
     }

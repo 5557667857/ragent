@@ -17,12 +17,15 @@
 
 package com.nageoffer.ai.ragent.mcp;
 
+import com.nageoffer.ai.ragent.mcp.config.AmapProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * MCP Server 启动类
  */
+@EnableConfigurationProperties(AmapProperties.class)
 @SpringBootApplication
 public class McpServerApplication {
 

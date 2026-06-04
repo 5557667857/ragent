@@ -18,7 +18,6 @@
 package com.nageoffer.ai.ragent.infra.chat;
 
 import lombok.NoArgsConstructor;
-import okhttp3.Call;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -36,18 +35,18 @@ public final class StreamCancellationHandles {
         return NOOP;
     }
 
-    public static StreamCancellationHandle fromOkHttp(Call call, AtomicBoolean cancelled) {
-        return new OkHttpCancellationHandle(call, cancelled);
+    public static StreamCancellationHandle fromRunnable(Runnable cancelAction, AtomicBoolean cancelled) {
+        return new RunnableCancellationHandle(cancelAction, cancelled);
     }
 
-    private static final class OkHttpCancellationHandle implements StreamCancellationHandle {
+    private static final class RunnableCancellationHandle implements StreamCancellationHandle {
 
-        private final Call call;
+        private final Runnable cancelAction;
         private final AtomicBoolean cancelled;
         private final AtomicBoolean once = new AtomicBoolean(false);
 
-        private OkHttpCancellationHandle(Call call, AtomicBoolean cancelled) {
-            this.call = call;
+        private RunnableCancellationHandle(Runnable cancelAction, AtomicBoolean cancelled) {
+            this.cancelAction = cancelAction;
             this.cancelled = cancelled;
         }
 
@@ -59,8 +58,8 @@ public final class StreamCancellationHandles {
             if (cancelled != null) {
                 cancelled.set(true);
             }
-            if (call != null) {
-                call.cancel();
+            if (cancelAction != null) {
+                cancelAction.run();
             }
         }
     }

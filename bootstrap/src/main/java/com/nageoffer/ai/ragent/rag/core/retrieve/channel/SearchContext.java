@@ -50,9 +50,9 @@ public class SearchContext {
     private List<String> subQuestions;
 
     /**
-     * 意图识别结果
+     * 意图识别结果（当前子问题）
      */
-    private List<SubQuestionIntent> intents;
+    private SubQuestionIntent subIntent;
 
     /**
      * 期望返回的结果数量
