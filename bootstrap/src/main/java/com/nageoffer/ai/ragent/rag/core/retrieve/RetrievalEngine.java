@@ -34,9 +34,9 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.CONTEXT_FORMAT_PA
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MULTI_CHANNEL_KEY;
 
 /**
- * 检索引擎。
+ * 妫€绱㈠紩鎿庛€?
  * <p>
- * 负责协调知识库检索和 MCP 工具调用，将不同通道的结果格式化为可供 LLM 使用的上下文。
+ * 璐熻矗鍗忚皟鐭ヨ瘑搴撴绱㈠拰 MCP 宸ュ叿璋冪敤锛屽皢涓嶅悓閫氶亾鐨勭粨鏋滄牸寮忓寲涓哄彲渚?LLM 浣跨敤鐨勪笂涓嬫枃銆?
  */
 @Slf4j
 @Service
@@ -53,7 +53,7 @@ public class RetrievalEngine {
     private final Executor mcpBatchExecutor;
 
     /**
-     * 根据子问题意图列表执行检索，整合知识库和 MCP 工具结果。
+     * 鏍规嵁瀛愰棶棰樻剰鍥惧垪琛ㄦ墽琛屾绱紝鏁村悎鐭ヨ瘑搴撳拰 MCP 宸ュ叿缁撴灉銆?
      */
     @RagTraceNode(name = "retrieval-engine", type = "RETRIEVE")
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
@@ -73,7 +73,7 @@ public class RetrievalEngine {
                                         resolveSubQuestionTopK(si, finalTopK)
                                 );
                             } catch (Exception e) {
-                                log.error("子问题上下文构建失败，降级为空上下文，question={}", si.subQuestion(), e);
+                                log.error("瀛愰棶棰樹笂涓嬫枃鏋勫缓澶辫触锛岄檷绾т负绌轰笂涓嬫枃锛宷uestion={}", si.subQuestion(), e);
                                 return new SubQuestionContext(si.subQuestion(), "", "", Map.of());
                             }
                         },
@@ -128,41 +128,41 @@ public class RetrievalEngine {
     }
 
     /**
-     * 根据单个子问题的意图分类结果，分别执行 KB 检索和 MCP 工具调用，并构建该子问题上下文。
+     * 鏍规嵁鍗曚釜瀛愰棶棰樼殑鎰忓浘鍒嗙被缁撴灉锛屽垎鍒墽琛?KB 妫€绱㈠拰 MCP 宸ュ叿璋冪敤锛屽苟鏋勫缓璇ュ瓙闂涓婁笅鏂囥€?
      * <p>
-     * 意图到动作的分发在这里发生：一个子问题可能同时命中 KB 和 MCP 两类意图，
-     * 两个通道会分别执行后再合并。
+     * 鎰忓浘鍒板姩浣滅殑鍒嗗彂鍦ㄨ繖閲屽彂鐢燂細涓€涓瓙闂鍙兘鍚屾椂鍛戒腑 KB 鍜?MCP 涓ょ被鎰忓浘锛?
+     * 涓や釜閫氶亾浼氬垎鍒墽琛屽悗鍐嶅悎骞躲€?
      *
-     * @param intent 子问题及其意图候选列表
-     * @param topK   该子问题的检索 TopK，未配置时回退到全局默认值
-     * @return 子问题上下文，包含 KB 检索文本、MCP 调用结果文本，以及按意图节点分组的原始 chunk
+     * @param intent 瀛愰棶棰樺強鍏舵剰鍥惧€欓€夊垪琛?
+     * @param topK   璇ュ瓙闂鐨勬绱?TopK锛屾湭閰嶇疆鏃跺洖閫€鍒板叏灞€榛樿鍊?
+     * @return 瀛愰棶棰樹笂涓嬫枃锛屽寘鍚?KB 妫€绱㈡枃鏈€丮CP 璋冪敤缁撴灉鏂囨湰锛屼互鍙婃寜鎰忓浘鑺傜偣鍒嗙粍鐨勫師濮?chunk
      */
     private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {
-        // 1. 按 IntentNode.kind 将意图候选分流：KB 走知识库检索，MCP 走工具调用。
+        // 1. 鎸?IntentNode.kind 灏嗘剰鍥惧€欓€夊垎娴侊細KB 璧扮煡璇嗗簱妫€绱紝MCP 璧板伐鍏疯皟鐢ㄣ€?
         //    NodeScoreFilters.kb(): node != null && node.isKB()
-        //    NodeScoreFilters.mcp(): node != null && node.isMCP() && mcpToolId 非空
+        //    NodeScoreFilters.mcp(): node != null && node.isMCP() && mcpToolId 闈炵┖
         List<NodeScore> kbIntents = NodeScoreFilters.kb(intent.nodeScores());
         List<NodeScore> mcpIntents = NodeScoreFilters.mcp(intent.nodeScores());
 
-        // 2. 知识库通道：执行多通道检索、重排和上下文格式化。
-        //    返回 KbResult，包含格式化文本 groupedContext 和按意图节点分组的原始 chunk。
+        // 2. 鐭ヨ瘑搴撻€氶亾锛氭墽琛屽閫氶亾妫€绱€侀噸鎺掑拰涓婁笅鏂囨牸寮忓寲銆?
+        //    杩斿洖 KbResult锛屽寘鍚牸寮忓寲鏂囨湰 groupedContext 鍜屾寜鎰忓浘鑺傜偣鍒嗙粍鐨勫師濮?chunk銆?
         KbResult kbResult = retrieveAndRerank(intent, kbIntents, topK);
 
-        // 3. MCP 通道：如果命中 MCP 意图，则按意图节点逐个调用工具并合并结果。
-        //    executeMcpAndMerge 内部会：
-        //    a) 遍历每个 MCP 意图并调用 executeSingleMcpTool()
-        //    b) 将命中的 ToolCallback 交给 ChatClient，由模型根据工具 schema 解析参数并调用工具
-        //    c) 使用 ContextFormatter 将模型结合工具结果生成的文本格式化为 LLM 可读上下文
+        // 3. MCP 閫氶亾锛氬鏋滃懡涓?MCP 鎰忓浘锛屽垯鎸夋剰鍥捐妭鐐归€愪釜璋冪敤宸ュ叿骞跺悎骞剁粨鏋溿€?
+        //    executeMcpAndMerge 鍐呴儴浼氾細
+        //    a) 閬嶅巻姣忎釜 MCP 鎰忓浘骞惰皟鐢?executeSingleMcpTool()
+        //    b) 灏嗗懡涓殑 ToolCallback 浜ょ粰 ChatClient锛岀敱妯″瀷鏍规嵁宸ュ叿 schema 瑙ｆ瀽鍙傛暟骞惰皟鐢ㄥ伐鍏?
+        //    c) 浣跨敤 ContextFormatter 灏嗘ā鍨嬬粨鍚堝伐鍏风粨鏋滅敓鎴愮殑鏂囨湰鏍煎紡鍖栦负 LLM 鍙涓婁笅鏂?
         String mcpContext = CollUtil.isNotEmpty(mcpIntents)
                 ? executeMcpAndMerge(intent.subQuestion(), mcpIntents)
                 : "";
 
-        // 4. 合并两路结果为一个 SubQuestionContext。
+        // 4. 鍚堝苟涓よ矾缁撴灉涓轰竴涓?SubQuestionContext銆?
         return new SubQuestionContext(intent.subQuestion(), kbResult.groupedContext(), mcpContext, kbResult.intentChunks());
     }
 
     /**
-     * 计算子问题实际使用的 TopK。
+     * 璁＄畻瀛愰棶棰樺疄闄呬娇鐢ㄧ殑 TopK銆?
      */
     private int resolveSubQuestionTopK(SubQuestionIntent intent, int fallbackTopK) {
         return NodeScoreFilters.kb(intent.nodeScores()).stream()
@@ -200,25 +200,25 @@ public class RetrievalEngine {
     }
 
     private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
-        // 使用多通道检索引擎，是否启用全局检索由置信度阈值决定。
+        // 浣跨敤澶氶€氶亾妫€绱㈠紩鎿庯紝鏄惁鍚敤鍏ㄥ眬妫€绱㈢敱缃俊搴﹂槇鍊煎喅瀹氥€?
         List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKnowledgeChannels(intent, topK);
 
         if (CollUtil.isEmpty(chunks)) {
             return KbResult.empty();
         }
 
-        // 按意图节点分组，用于格式化上下文。
+        // 鎸夋剰鍥捐妭鐐瑰垎缁勶紝鐢ㄤ簬鏍煎紡鍖栦笂涓嬫枃銆?
         Map<String, List<RetrievedChunk>> intentChunks = new HashMap<>();
 
-        // 如果有意图识别结果，按意图节点 ID 分组。
+        // 濡傛灉鏈夋剰鍥捐瘑鍒粨鏋滐紝鎸夋剰鍥捐妭鐐?ID 鍒嗙粍銆?
         if (CollUtil.isNotEmpty(kbIntents)) {
-            // 多通道检索返回的 chunks 无法精确对应到某个意图节点，
-            // 因此将所有 chunks 分配给每个命中的意图节点。
+            // 澶氶€氶亾妫€绱㈣繑鍥炵殑 chunks 鏃犳硶绮剧‘瀵瑰簲鍒版煇涓剰鍥捐妭鐐癸紝
+            // 鍥犳灏嗘墍鏈?chunks 鍒嗛厤缁欐瘡涓懡涓殑鎰忓浘鑺傜偣銆?
             for (NodeScore ns : kbIntents) {
                 intentChunks.put(ns.getNode().getId(), chunks);
             }
         } else {
-            // 如果没有意图识别结果，使用特殊 key 承载多通道检索结果。
+            // 濡傛灉娌℃湁鎰忓浘璇嗗埆缁撴灉锛屼娇鐢ㄧ壒娈?key 鎵胯浇澶氶€氶亾妫€绱㈢粨鏋溿€?
             intentChunks.put(MULTI_CHANNEL_KEY, chunks);
         }
 
@@ -227,7 +227,7 @@ public class RetrievalEngine {
     }
 
     /**
-     * 执行 MCP 工具调用，返回按 toolId 分组的结果。
+     * 鎵ц MCP 宸ュ叿璋冪敤锛岃繑鍥炴寜 toolId 鍒嗙粍鐨勭粨鏋溿€?
      */
     private Map<String, List<String>> executeMcpTools(String question,
                                                        List<NodeScore> mcpIntentScores) {
@@ -243,8 +243,9 @@ public class RetrievalEngine {
                                 String result = executeSingleMcpTool(question, ns.getNode());
                                 return result == null ? null : new ToolOutput(toolId, result);
                             } catch (Exception e) {
-                                log.error("MCP 工具调用异常, toolId: {}", toolId, e);
-                                return new ToolOutput(toolId, "工具调用异常: " + e.getMessage());
+                                log.warn("MCP tool call failed, ignore tool result, toolId={}, error={}",
+                                        toolId, e.getMessage());
+                                return null;
                             }
                         },
                         mcpBatchExecutor
@@ -261,12 +262,12 @@ public class RetrievalEngine {
     }
 
     private String executeSingleMcpTool(String question, IntentNode intentNode) {
-        // 从意图节点中取得要调用的 MCP 工具名。
+        // 浠庢剰鍥捐妭鐐逛腑鍙栧緱瑕佽皟鐢ㄧ殑 MCP 宸ュ叿鍚嶃€?
         String toolId = intentNode.getMcpToolId();
-        // 按工具名获取 Spring AI MCP ToolCallback。这里返回的 ToolCallback 内部持有 MCP Client
+        // 鎸夊伐鍏峰悕鑾峰彇 Spring AI MCP ToolCallback銆傝繖閲岃繑鍥炵殑 ToolCallback 鍐呴儴鎸佹湁 MCP Client
         Optional<ToolCallback> toolCallbackOpt = mcpToolRegistry.getToolCallback(toolId);
         if (toolCallbackOpt.isEmpty()) {
-            log.warn("MCP 工具不存在, toolId={}", toolId);
+            log.warn("MCP tool does not exist or is unavailable, ignore MCP context, toolId={}", toolId);
             return null;
         }
         ToolCallback toolCallback = toolCallbackOpt.get();

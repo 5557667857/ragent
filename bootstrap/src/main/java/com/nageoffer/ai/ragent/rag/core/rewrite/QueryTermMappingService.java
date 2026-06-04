@@ -38,7 +38,6 @@ public class QueryTermMappingService {
 
     private final QueryTermMappingMapper mappingMapper;
     private final QueryTermMappingCacheManager cacheManager;
-
     /**
      * 对用户问题做术语归一化
      */

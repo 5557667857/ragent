@@ -18,11 +18,11 @@
 package com.nageoffer.ai.ragent.rag.core.mcp;
 
 import cn.hutool.core.util.StrUtil;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -39,14 +39,34 @@ public class DefaultMcpToolRegistry implements McpToolRegistry {
 
     private final Map<String, ToolCallback> toolCallbackMap = new HashMap<>();
 
-    private final SyncMcpToolCallbackProvider toolCallbackProvider;
+    private final ObjectProvider<SyncMcpToolCallbackProvider> toolCallbackProvider;
 
-    @PostConstruct
-    public void init() {
-        for (ToolCallback toolCallback : toolCallbackProvider.getToolCallbacks()) {
-            register(toolCallback);
+    private volatile boolean initialized = false;
+
+    private void initializeIfNecessary() {
+        if (initialized) {
+            return;
         }
-        log.info("MCP tools registered from Spring AI, total={}", toolCallbackMap.size());
+        synchronized (this) {
+            if (initialized) {
+                return;
+            }
+            try {
+                SyncMcpToolCallbackProvider provider = toolCallbackProvider.getIfAvailable();
+                if (provider == null) {
+                    log.warn("Spring AI MCP tool callback provider is not available");
+                    return;
+                }
+                for (ToolCallback toolCallback : provider.getToolCallbacks()) {
+                    register(toolCallback);
+                }
+                initialized = true;
+                log.info("MCP tools registered from Spring AI, total={}", toolCallbackMap.size());
+            } catch (Exception e) {
+                log.warn("MCP tools are not available now, skip registration. MCP server may be down. error={}",
+                        e.getMessage());
+            }
+        }
     }
 
     private void register(ToolCallback toolCallback) {
@@ -71,6 +91,10 @@ public class DefaultMcpToolRegistry implements McpToolRegistry {
 
     @Override
     public Optional<ToolCallback> getToolCallback(String toolId) {
+        if (StrUtil.isBlank(toolId)) {
+            return Optional.empty();
+        }
+        initializeIfNecessary();
         return Optional.ofNullable(toolCallbackMap.get(toolId));
     }
 }

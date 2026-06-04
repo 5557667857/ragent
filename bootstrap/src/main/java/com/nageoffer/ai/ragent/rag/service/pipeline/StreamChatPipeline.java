@@ -90,7 +90,6 @@ public class StreamChatPipeline {
         rewriteQuery(ctx);
         // 解析改写后问题的意图，识别具体的业务或知识领域意图
         resolveIntents(ctx);
-
         // 检测是否存在歧义，若存在则进行引导性回复并终止后续流程
         if (handleGuidance(ctx)) {
             return;
@@ -99,7 +98,6 @@ public class StreamChatPipeline {
         if (handleSystemOnly(ctx)) {
             return;
         }
-
         // 根据解析出的意图执行知识库或外部工具的检索操作
         RetrievalContext retrievalCtx = retrieve(ctx);
         // 若检索结果为空，则返回默认提示语并终止后续流程
@@ -133,13 +131,18 @@ public class StreamChatPipeline {
     }
 
     private boolean handleGuidance(StreamChatContext ctx) {
+        // 意图识别后先判断是否存在歧义：例如多个 KB 意图分数很接近，
+        // 此时不急着检索，而是先让用户确认具体想问哪个方向。
         GuidanceDecision decision = guidanceService.detectAmbiguity(
                 ctx.getRewriteResult().rewrittenQuestion(),
                 ctx.getSubIntents()
         );
+        // 没有歧义时放行，继续后面的系统意图判断、知识库检索或 MCP 工具调用。
         if (!decision.isPrompt()) {
             return false;
         }
+        // 有歧义时直接把澄清问题通过流式回调返回给前端，并结束本轮处理。
+        // 返回 true 表示当前阶段已经处理完，execute() 会短路，不再继续检索和生成答案。
         StreamCallback callback = ctx.getCallback();
         callback.onContent(decision.getPrompt());
         callback.onComplete();
@@ -184,7 +187,7 @@ public class StreamChatPipeline {
     }
 
     private void streamRagResponse(StreamChatContext ctx, RetrievalContext retrievalCtx) {
-        // 聚合所有意图用于 prompt 规划
+        // 对已经过滤的意图进行mcp和kb的划分
         IntentGroup mergedGroup = intentResolver.mergeIntentGroup(ctx.getSubIntents());
 
         StreamCancellationHandle handle = streamLLMResponse(

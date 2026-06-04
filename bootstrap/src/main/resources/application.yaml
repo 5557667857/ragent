@@ -21,6 +21,7 @@ spring:
         name: ragent-bootstrap
         version: 1.0.0
         type: sync
+        initialized: false
         request-timeout: 60s
         streamable-http:
           connections:

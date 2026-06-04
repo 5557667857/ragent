@@ -142,7 +142,12 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
             messages.addAll(recentHistory);
         }
 
-        messages.add(ChatMessage.user(question));
+        messages.add(ChatMessage.user("""
+                请只改写下面【当前用户问题】，历史消息仅用于理解指代关系，不要改写历史消息。
+
+                【当前用户问题】
+                %s
+                """.formatted(question)));
 
         return ChatRequest.builder()
                 .messages(messages)
