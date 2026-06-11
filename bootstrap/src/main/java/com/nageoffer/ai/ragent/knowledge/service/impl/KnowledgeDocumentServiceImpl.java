@@ -836,6 +836,23 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         }
     }
 
+    @Override
+    public String preview(String docId) {
+        KnowledgeDocumentDO documentDO = documentMapper.selectById(docId);
+        Assert.notNull(documentDO, () -> new ClientException("Document does not exist"));
+        if (!"markdown".equalsIgnoreCase(documentDO.getFileType())
+                && !"md".equalsIgnoreCase(documentDO.getFileType())) {
+            throw new ClientException("Only markdown documents can be previewed");
+        }
+        try (InputStream inputStream = fileStorageService.openStream(documentDO.getFileUrl())) {
+            return new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (ClientException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ClientException("Failed to read document content: " + ex.getMessage());
+        }
+    }
+
     private void deleteStoredFileQuietly(KnowledgeDocumentDO documentDO) {
         if (documentDO == null || !StringUtils.hasText(documentDO.getFileUrl())) {
             return;

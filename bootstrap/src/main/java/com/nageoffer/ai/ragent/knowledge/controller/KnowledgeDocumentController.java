@@ -28,8 +28,11 @@ import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentSearchVO
 import com.nageoffer.ai.ragent.framework.convention.Result;
 import com.nageoffer.ai.ragent.framework.web.Results;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentService;
+import com.nageoffer.ai.ragent.rag.service.FileStorageService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.util.StreamUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,7 +47,11 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 知识库文档管理控制器
@@ -56,6 +63,14 @@ import java.util.List;
 public class KnowledgeDocumentController {
 
     private final KnowledgeDocumentService documentService;
+    private final FileStorageService fileStorageService;
+
+    private static final Map<String, String> CONTENT_TYPE_MAP = Map.of(
+            "pdf", "application/pdf",
+            "markdown", "text/markdown",
+            "md", "text/markdown",
+            "txt", "text/plain"
+    );
 
     /**
      * 上传文档：入库记录 + 文件落盘，返回文档ID
@@ -138,5 +153,24 @@ public class KnowledgeDocumentController {
     public Result<IPage<KnowledgeDocumentChunkLogVO>> getChunkLogs(@PathVariable String docId,
                                                                    Page<KnowledgeDocumentChunkLogVO> page) {
         return Results.success(documentService.getChunkLogs(docId, page));
+    }
+
+    @GetMapping("/knowledge-base/docs/{docId}/preview")
+    public Result<String> preview(@PathVariable String docId) {
+        return Results.success(documentService.preview(docId));
+    }
+
+    @GetMapping("/knowledge-base/docs/{docId}/file")
+    public void file(@PathVariable String docId, HttpServletResponse response) throws Exception {
+        KnowledgeDocumentVO document = documentService.get(docId);
+        String fileType = document.getFileType() != null ? document.getFileType().toLowerCase() : "";
+        response.setContentType(CONTENT_TYPE_MAP.getOrDefault(fileType, "application/octet-stream"));
+        response.setHeader(
+                "Content-Disposition",
+                "inline; filename=\"" + URLEncoder.encode(document.getDocName(), StandardCharsets.UTF_8) + "\""
+        );
+        try (InputStream inputStream = fileStorageService.openStream(document.getFileUrl())) {
+            StreamUtils.copy(inputStream, response.getOutputStream());
+        }
     }
 }

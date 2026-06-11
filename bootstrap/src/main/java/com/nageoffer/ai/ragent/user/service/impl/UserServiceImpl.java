@@ -25,6 +25,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.framework.context.LoginUser;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
+import com.nageoffer.ai.ragent.user.aop.LogRecord;
 import com.nageoffer.ai.ragent.user.controller.request.ChangePasswordRequest;
 import com.nageoffer.ai.ragent.user.controller.request.UserCreateRequest;
 import com.nageoffer.ai.ragent.user.controller.request.UserPageRequest;
@@ -62,6 +63,7 @@ public class UserServiceImpl implements UserService {
         return result.convert(this::toVO);
     }
 
+    @LogRecord
     @Override
     public String create(UserCreateRequest requestParam) {
         Assert.notNull(requestParam, () -> new ClientException("请求不能为空"));

@@ -8,14 +8,19 @@ spring:
     name: ragent${unique-name:}-service
   ai:
     openai:
-      api-key: sk-d5a627e2d991493093ca6678d4696400
-      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      # 1. 替换为硅基流动的 API Key（去官网控制台获取，以 sk- 开头）
+      api-key: ${SILICONFLOW_API_KEY}
+      # Spring AI 会自动追加 /v1/chat/completions 和 /v1/embeddings
+      base-url: https://api.siliconflow.cn
       chat:
         options:
-          model: qwen-turbo
+          # 3. 填写硅基流动模型广场的完整模型名称
+          model: deepseek-ai/DeepSeek-V3.2
       embedding:
         options:
-          model: text-embedding-v1
+          # 向量模型也需要填写完整名称
+          model: Qwen/Qwen3-Embedding-8B
+          dimensions: 1536
     mcp:
       client:
         name: ragent-bootstrap
@@ -137,3 +142,5 @@ sa-token:
 
 app:
   demo-mode: false
+  eval:
+    enabled: ${RAGENT_EVAL_ENABLED:true}

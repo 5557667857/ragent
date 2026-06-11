@@ -84,29 +84,55 @@ public class StreamChatPipeline {
      * @param ctx 流式对话上下文，包含请求参数、状态及回调等信息
      */
     public void execute(StreamChatContext ctx) {
+        long pipelineStart = System.currentTimeMillis();
+
         // 加载历史对话记忆并追加当前用户问题到上下文中
+        long t0 = System.currentTimeMillis();
         loadMemory(ctx);
+        log.info("[流水线耗时] loadMemory: {}ms", System.currentTimeMillis() - t0);
+
         // 对用户问题进行查询改写和子问题拆分
+        long t1 = System.currentTimeMillis();
         rewriteQuery(ctx);
+        log.info("[流水线耗时] rewriteQuery: {}ms", System.currentTimeMillis() - t1);
+
         // 解析改写后问题的意图，识别具体的业务或知识领域意图
+        long t2 = System.currentTimeMillis();
         resolveIntents(ctx);
+        log.info("[流水线耗时] resolveIntents: {}ms", System.currentTimeMillis() - t2);
+
         // 检测是否存在歧义，若存在则进行引导性回复并终止后续流程
+        long t3 = System.currentTimeMillis();
         if (handleGuidance(ctx)) {
+            log.info("[流水线耗时] handleGuidance 短路, 总耗时: {}ms", System.currentTimeMillis() - pipelineStart);
             return;
         }
+        log.info("[流水线耗时] handleGuidance: {}ms", System.currentTimeMillis() - t3);
+
         // 检查是否仅包含系统级意图（如问候、闲聊等），若是则直接生成系统回复并终止后续流程
+        long t4 = System.currentTimeMillis();
         if (handleSystemOnly(ctx)) {
+            log.info("[流水线耗时] handleSystemOnly 短路, 总耗时: {}ms", System.currentTimeMillis() - pipelineStart);
             return;
         }
+        log.info("[流水线耗时] handleSystemOnly: {}ms", System.currentTimeMillis() - t4);
+
         // 根据解析出的意图执行知识库或外部工具的检索操作
+        long t5 = System.currentTimeMillis();
         RetrievalContext retrievalCtx = retrieve(ctx);
+        log.info("[流水线耗时] retrieve: {}ms", System.currentTimeMillis() - t5);
+
         // 若检索结果为空，则返回默认提示语并终止后续流程
         if (handleEmptyRetrieval(ctx, retrievalCtx)) {
+            log.info("[流水线耗时] handleEmptyRetrieval 短路, 总耗时: {}ms", System.currentTimeMillis() - pipelineStart);
             return;
         }
 
         // 组装最终 Prompt 并调用大模型进行流式响应输出
+        long t6 = System.currentTimeMillis();
         streamRagResponse(ctx, retrievalCtx);
+        log.info("[流水线耗时] streamRagResponse 启动: {}ms (总耗时: {}ms)",
+                System.currentTimeMillis() - t6, System.currentTimeMillis() - pipelineStart);
     }
 
     // ==================== 流水线阶段 ====================

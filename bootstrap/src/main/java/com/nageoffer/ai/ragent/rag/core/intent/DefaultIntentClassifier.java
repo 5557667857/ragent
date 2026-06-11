@@ -68,14 +68,21 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
      * 每次调用都会重新从Redis读取，确保数据是最新的
      */
     private IntentTreeData loadIntentTreeData() {
+        long t0 = System.currentTimeMillis();
         // 1. 从Redis读取（如果不存在会自动从数据库加载）
         List<IntentNode> roots = intentTreeCacheManager.getIntentTreeFromCache();
+        log.info("[意图分类耗时] 从Redis加载意图树: {}ms", System.currentTimeMillis() - t0);
 
         // 2. 如果Redis也没有，从数据库加载并缓存
         if (CollUtil.isEmpty(roots)) {
+            long t1 = System.currentTimeMillis();
             roots = loadIntentTreeFromDB();
+            log.info("[意图分类耗时] Redis未命中, 从DB加载: {}ms (节点数: {})",
+                    System.currentTimeMillis() - t1, roots.size());
             if (!roots.isEmpty()) {
+                long t2 = System.currentTimeMillis();
                 intentTreeCacheManager.saveIntentTreeToCache(roots);
+                log.info("[意图分类耗时] 保存意图树到Redis: {}ms", System.currentTimeMillis() - t2);
             }
         }
 
@@ -136,10 +143,19 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
      */
     @Override
     public List<NodeScore> classifyTargets(String question) {
-        // 每次都从Redis读取最新数据
-        IntentTreeData data = loadIntentTreeData();
+        long start = System.currentTimeMillis();
 
+        // 每次都从Redis读取最新数据
+        long t0 = System.currentTimeMillis();
+        IntentTreeData data = loadIntentTreeData();
+        long loadTreeCost = System.currentTimeMillis() - t0;
+        log.info("[意图分类耗时] 加载意图树: {}ms (叶子节点数: {})", loadTreeCost, data.leafNodes.size());
+
+        long t1 = System.currentTimeMillis();
         String systemPrompt = buildPrompt(data.leafNodes);
+        long buildPromptCost = System.currentTimeMillis() - t1;
+        log.info("[意图分类耗时] 构建Prompt: {}ms", buildPromptCost);
+
         ChatRequest request = ChatRequest.builder()
                 .messages(List.of(
                         ChatMessage.system(systemPrompt),
@@ -150,9 +166,13 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
                 .thinking(false)
                 .build();
 
+        long t2 = System.currentTimeMillis();
         String raw = SpringAiChatSupport.chat(chatModel, request);
+        long llmCost = System.currentTimeMillis() - t2;
+        log.info("[意图分类耗时] LLM调用: {}ms", llmCost);
 
         try {
+            long t3 = System.currentTimeMillis();
             JsonElement root = JsonParser.parseString(raw);
             JsonArray arr;
             if (root.isJsonArray()) {
@@ -193,9 +213,13 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
                             }).collect(Collectors.toList())
                     )
             );
+            log.info("[意图分类耗时] 解析结果: {}ms | 总耗时: {}ms (加载意图树: {}ms, 构建Prompt: {}ms, LLM调用: {}ms)",
+                    System.currentTimeMillis() - t3, System.currentTimeMillis() - start,
+                    loadTreeCost, buildPromptCost, llmCost);
             return scores;
         } catch (Exception e) {
             log.warn("解析 LLM 响应失败, 原始内容: {}", raw, e);
+            log.info("[意图分类耗时] 解析失败, 总耗时: {}ms", System.currentTimeMillis() - start);
             return List.of();
         }
     }

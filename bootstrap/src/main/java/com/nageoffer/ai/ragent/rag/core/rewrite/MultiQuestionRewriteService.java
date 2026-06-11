@@ -96,23 +96,38 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
     private RewriteResult callLLMRewriteAndSplit(String normalizedQuestion,
                                                  String originalQuestion,
                                                  List<ChatMessage> history) {
+        long start = System.currentTimeMillis();
+
+        long t0 = System.currentTimeMillis();
         String systemPrompt = promptTemplateLoader.load(QUERY_REWRITE_AND_SPLIT_PROMPT_PATH);
         ChatRequest req = buildRewriteRequest(systemPrompt, normalizedQuestion, history);
+        long promptBuildCost = System.currentTimeMillis() - t0;
+        log.info("[改写耗时] 加载Prompt+构建请求: {}ms", promptBuildCost);
 
         try {
             // 调用 LLM 进行查询改写 + 多问句拆分
+            long t1 = System.currentTimeMillis();
             String raw = SpringAiChatSupport.chat(chatModel, req);
+            long llmCost = System.currentTimeMillis() - t1;
+            log.info("[改写耗时] LLM调用: {}ms", llmCost);
+
             // 解析结果
+            long t2 = System.currentTimeMillis();
             RewriteResult parsed = parseRewriteAndSplit(raw);
+            long parseCost = System.currentTimeMillis() - t2;
+            log.info("[改写耗时] 解析结果: {}ms", parseCost);
 
             if (parsed != null) {
+                long totalCost = System.currentTimeMillis() - start;
                 log.info("""
                         RAG用户问题查询改写+拆分：
                         原始问题：{}
                         归一化后：{}
                         改写结果：{}
                         子问题：{}
-                        """, originalQuestion, normalizedQuestion, parsed.rewrittenQuestion(), parsed.subQuestions());
+                        [改写耗时] 总耗时: {}ms (Prompt构建: {}ms, LLM调用: {}ms, 解析: {}ms)
+                        """, originalQuestion, normalizedQuestion, parsed.rewrittenQuestion(), parsed.subQuestions(),
+                        totalCost, promptBuildCost, llmCost, parseCost);
                 return parsed;
             }
 
@@ -121,6 +136,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
             log.warn("查询改写+拆分 LLM 调用失败，使用归一化问题兜底 - question={}，normalizedQuestion={}", originalQuestion, normalizedQuestion, e);
         }
 
+        log.info("[改写耗时] 兜底返回, 总耗时: {}ms", System.currentTimeMillis() - start);
         // 统一兜底逻辑
         return new RewriteResult(normalizedQuestion, List.of(normalizedQuestion));
     }

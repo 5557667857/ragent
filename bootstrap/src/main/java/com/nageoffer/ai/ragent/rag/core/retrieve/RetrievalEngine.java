@@ -57,6 +57,7 @@ public class RetrievalEngine {
      */
     @RagTraceNode(name = "retrieval-engine", type = "RETRIEVE")
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
+        long start = System.currentTimeMillis();
         if (CollUtil.isEmpty(subIntents)) {
             return RetrievalContext.builder()
                     .intentChunks(Map.of())
@@ -64,6 +65,7 @@ public class RetrievalEngine {
         }
 
         int finalTopK = topK > 0 ? topK : searchProperties.getDefaultTopK();
+        log.info("[检索耗时] 开始检索, 子问题数: {}, topK: {}", subIntents.size(), finalTopK);
         List<CompletableFuture<SubQuestionContext>> tasks = subIntents.stream()
                 .map(si -> CompletableFuture.supplyAsync(
                         () -> {
@@ -80,9 +82,11 @@ public class RetrievalEngine {
                         ragContextExecutor
                 ))
                 .toList();
+        long t0 = System.currentTimeMillis();
         List<SubQuestionContext> contexts = tasks.stream()
                 .map(CompletableFuture::join)
                 .toList();
+        log.info("[检索耗时] 等待所有子问题上下文构建完成: {}ms", System.currentTimeMillis() - t0);
 
         Map<String, List<RetrievedChunk>> mergedIntentChunks = new HashMap<>();
         for (SubQuestionContext context : contexts) {
@@ -120,11 +124,13 @@ public class RetrievalEngine {
             mcpContext = mcpBuilder.toString().trim();
         }
 
-        return RetrievalContext.builder()
+        RetrievalContext result = RetrievalContext.builder()
                 .mcpContext(mcpContext)
                 .kbContext(kbContext)
                 .intentChunks(mergedIntentChunks)
                 .build();
+        log.info("[检索耗时] 总耗时: {}ms", System.currentTimeMillis() - start);
+        return result;
     }
 
     /**

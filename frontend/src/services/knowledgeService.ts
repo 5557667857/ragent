@@ -239,6 +239,10 @@ export const getDocument = async (docId: string): Promise<KnowledgeDocument> => 
   return api.get<KnowledgeDocument, KnowledgeDocument>(`/knowledge-base/docs/${docId}`);
 };
 
+export const previewDocument = async (docId: string): Promise<string> => {
+  return api.get<unknown, string>(`/knowledge-base/docs/${docId}/preview`);
+};
+
 export const updateDocument = async (docId: string, data: {
   docName?: string;
   processMode?: string;

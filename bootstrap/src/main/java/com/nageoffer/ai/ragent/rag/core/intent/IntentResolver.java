@@ -53,10 +53,13 @@ public class IntentResolver {
 
     @RagTraceNode(name = "intent-resolve", type = "INTENT")
     public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {
+        long start = System.currentTimeMillis();
         List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
                 ? rewriteResult.subQuestions()
                 : List.of(rewriteResult.rewrittenQuestion());
-        
+
+        log.info("[意图解析耗时] 子问题数量: {}", subQuestions.size());
+
         List<Future<SubQuestionIntent>> futures = new ArrayList<>();
         for (String q : subQuestions) {
             futures.add(intentClassifyExecutor.submit(() -> {
@@ -69,6 +72,7 @@ public class IntentResolver {
             }));
         }
 
+        long t0 = System.currentTimeMillis();
         List<SubQuestionIntent> subIntents = futures.stream()
                 .map(future -> {
                     try {
@@ -81,9 +85,12 @@ public class IntentResolver {
                 })
                 .filter(item -> item != null)
                 .collect(Collectors.toList());
-                
+        log.info("[意图解析耗时] 等待所有子问题意图分类完成: {}ms", System.currentTimeMillis() - t0);
+
         // 限制总意图数量不超过 MAX_INTENT_COUNT
-        return capTotalIntents(subIntents);
+        List<SubQuestionIntent> result = capTotalIntents(subIntents);
+        log.info("[意图解析耗时] 总耗时: {}ms (子问题数: {})", System.currentTimeMillis() - start, subQuestions.size());
+        return result;
     }
 
     public IntentGroup mergeIntentGroup(List<SubQuestionIntent> subIntents) {
