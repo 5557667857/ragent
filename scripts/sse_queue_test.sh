@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  set -a
+  source "${ROOT_DIR}/.env"
+  set +a
+fi
+
 # ==================== 颜色定义 ====================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -18,7 +25,7 @@ RESET='\033[0m'
 BASE_URL="${BASE_URL:-http://localhost:9090/api/ragent}"
 QUESTION="${QUESTION:-你是谁？你是ChatGPT么？}"
 CONCURRENCY="${CONCURRENCY:-3}"
-TOKEN="${TOKEN:-${SSE_TEST_TOKEN}}"
+TOKEN="${TOKEN:-${SSE_TEST_TOKEN:-}}"
 CONVERSATION_ID="${CONVERSATION_ID:-}"
 LOG_DIR="${LOG_DIR:-$(pwd)/logs}"
 

@@ -4,6 +4,8 @@ server:
     context-path: /api/ragent
 
 spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
   application:
     name: ragent${unique-name:}-service
   ai:

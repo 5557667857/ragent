@@ -9,13 +9,13 @@ services:
       - ":9000"
       - "--console-enable"
       - "--access-key"
-      - "rustfsadmin"
+      - "${LOCAL_RUSTFS_ACCESS_KEY}"
       - "--secret-key"
-      - "rustfsadmin"
+      - "${LOCAL_RUSTFS_SECRET_KEY}"
       - "/data"
     environment:
-      - RUSTFS_ACCESS_KEY=rustfsadmin
-      - RUSTFS_SECRET_KEY=rustfsadmin
+      - RUSTFS_ACCESS_KEY=${LOCAL_RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${LOCAL_RUSTFS_SECRET_KEY}
       - RUSTFS_CONSOLE_ENABLE=true
     ports:
       - "9000:9000"
@@ -60,8 +60,8 @@ services:
 
       # Milvus 使用 S3 兼容对象存储（这里指向 rustfs）
       MINIO_ADDRESS: rustfs:9000
-      MINIO_ACCESS_KEY_ID: rustfsadmin
-      MINIO_SECRET_ACCESS_KEY: rustfsadmin
+      MINIO_ACCESS_KEY_ID: ${LOCAL_RUSTFS_ACCESS_KEY}
+      MINIO_SECRET_ACCESS_KEY: ${LOCAL_RUSTFS_SECRET_KEY}
 
     volumes:
       - milvus-data:/var/lib/milvus
